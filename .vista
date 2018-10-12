@@ -1,0 +1,723 @@
+<?php
+function redirect($link){
+
+    header("Location:".$link);
+}
+function timeredirect($time,$url){
+
+
+$e=explode("-",$time);
+$end=end($e);
+$no=$e[0];
+if($end=="s" OR $end=="S"){
+    $time=$no*1;
+    
+}else if($end=="M" OR $end=="m"){
+    $time=$no*60;
+    
+}else if($end=="h" OR $end=="H"){
+    $time=$no*3600;
+}else{
+    echo"<script>alert('Redirect Time Is Not Set Poperly !');</script>";
+}
+
+    echo"<meta http-equiv='refresh'content='".$time.";url=".$url."'>";
+
+}
+function p($e){
+    $a=gettype($e);
+    if($a=="array"){
+        print_r($e);
+    }else{
+        echo"<p>". $e."</p>";
+    }
+}
+/////////////////////////////////////////////////////////////////////
+
+function en($no){
+    $no1=0;
+do{
+    echo"<br>";
+    $no1++;
+}while($no1<=$no);
+}
+function sthead($description,$keywords,$title){
+    echo"<!DOCTYPE html>
+<head><title>".$title."</title><meta name='keywords'content='".$keywords."'>
+<meta name='description'contents='".$description."'>
+<link rel='stylesheet' href='https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css'>
+ <link rel='stylesheet' href='https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css'>
+
+    <!-- Compiled and minified JavaScript -->
+    <script src='https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js'></script>
+           
+<style>
+.navbar {
+    overflow: hidden;
+    background-color: #333;
+    font-family: Arial, Helvetica, sans-serif;
+}
+
+.navbar a {
+    float: left;
+    font-size: 16px;
+    color: white;
+    text-align: center;
+    padding: 14px 16px;
+    text-decoration: none;
+}
+
+.dropdown {
+    float: left;
+    overflow: hidden;
+}
+
+.dropdown .dropbtn {
+    cursor: pointer;
+    font-size: 16px;    
+    border: none;
+    outline: none;
+    color: white;
+    padding: 14px 16px;
+    background-color: inherit;
+    font-family: inherit;
+    margin: 0;
+}
+
+.navbar a:hover, .dropdown:hover .dropbtn, .dropbtn:focus {
+    background-color: red;
+}
+
+.dropdown-content {
+    display: none;
+    position: absolute;
+    background-color: #f9f9f9;
+    min-width: 160px;
+    box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+    z-index: 1;
+}
+
+.dropdown-content a {
+    float: none;
+    color: black;
+    padding: 12px 16px;
+    text-decoration: none;
+    display: block;
+    text-align: left;
+}
+
+.dropdown-content a:hover {
+    background-color: #ddd;
+}
+
+.show {
+    display: block;
+}
+</style>
+
+<meta name='viewport' content='width=device-width, initial-scale=1.0'>
+
+<link rel='stylesheet' href='http://Cdnapicraze.epizy.com/Melt/V2/melt3.min.css' />
+
+<script>
+            
+            var menuDisplayed = false;
+            var menuBox = null;
+            
+            window.addEventListener('contextmenu', function() {
+                var left = arguments[0].clientX;
+                var top = arguments[0].clientY;
+                
+                menuBox = window.document.querySelector('.menu');
+                menuBox.style.left = left + 'px';
+                menuBox.style.top = top + 'px';
+                menuBox.style.display = 'block';
+                
+                arguments[0].preventDefault();
+                
+                menuDisplayed = true;
+            }, false);
+            
+            window.addEventListener('click', function() {
+                if(menuDisplayed == true){
+                    menuBox.style.display = 'none'; 
+                }
+            }, true);
+        </script>
+        <style>
+            .menu
+            {
+                width: 250px;
+                box-shadow: 3px 3px 25px #888888;
+                border-style: solid;
+                border-width: 1px;
+                border-color: transparent;
+                border-radius: 2px;
+                padding-left: 5px;
+                padding-right: 5px;
+                padding-top: 3px;
+                padding-bottom: 3px;
+                position: fixed;
+                display: none;
+                background-color:white;
+                border-radius:5px;
+            }
+            
+            .menu-item
+            {
+                height: 20px;
+                padding:20px;
+                border-radius:5px;
+                
+            }
+            
+            .menu-item:hover
+            {
+                background-color: #6CB5FF;
+                cursor: pointer;
+            }
+        </style>
+    
+    ";
+}
+function ehead(){
+    echo"</head><body>";
+}
+/////////////////////////////
+function hideerror(){
+    error_reporting(0);
+}
+
+/////////////////////////////////////
+
+function rightclick(){
+    echo"
+<div class='menu'>";
+}
+function rc_menu($name,$url){
+    echo"<a href='".$url."'> <div class='menu-item'>".$name."</div></a>
+           ";
+}
+            
+    
+    function erightclick(){
+        echo"</div>";
+    }
+////////////////////////////////////////////////////////////////////
+function input($type,$name,$placeholder){
+    if($type=="text" OR $type=="TEXT"){
+$a=explode(",",$name);
+foreach($a as $name){
+   echo"<input type='text'name='".$name."'placeholder='".$placeholder."'>"; 
+}
+
+        
+    
+
+
+    }else if($type=="button" OR $type=="BUTTON"){
+        $a=explode(",",$name);
+foreach($a as $name){
+
+        echo"<input type='button'name='".$name."'value='".$placeholder."'>";
+    }
+    }else if($type=="submit" OR $type=="SUBMIT"){
+        $a=explode(",",$name);
+foreach($a as $name){
+
+        echo"<input type='submit'name='".$name."'value='".$placeholder."'>";
+    }
+    }else if($type=="textarea" OR $type=="TEXTAREA"){
+        $a=explode(",",$name);
+foreach($a as $name){
+
+        echo"<textarea name='".$name."'placeholder='".$placeholder."'></textarea>";
+    }
+    }else if($type=="password" OR $type=="PASSWORD"){
+        $a=explode(",",$name);
+foreach($a as $name){
+
+        echo"<input type='password'name='".$name."'placeholder='".$placeholder."'>";
+    }
+    }else if($type=="radio" OR $type=="RADIO"){
+        $a=explode(",",$name);
+foreach($a as $name){
+
+        echo"<input type='radio'name='".$name."'value='".$placeholder."'>".$placeholder." ";
+    }
+    }else if($type=="checkbox" OR $type=="CHECKBOX"){
+        $a=explode(",",$name);
+foreach($a as $name){
+
+        echo"<input type='checkbox'name='".$name."'value='".$placeholder."'>".$placeholder." ";
+    }
+    }else if($type=="file" OR $type=="FILE"){
+        $a=explode(",",$name);
+foreach($a as $name){
+
+        echo"<input type='file'name='".$name."'placeholder='".$placeholder."'> ";
+    }
+}else{
+
+    echo"<input type='".$type."'name='".$name."'placeholder='".$placeholder."'>";
+}
+    
+}
+function select($name,$option){
+    echo"<select name='".$name."'>";
+    $a=explode(",",$option);
+    
+    foreach($a as $c){
+        echo"<option value='".$c."'>". $c."</option>";
+    }
+    echo"</select>";
+}
+////////////////////////////////////////////////////////////////////
+function menu($type,$li){
+    ///////////////////////////////////
+if($type=="ol" OR $type=="OL"){
+    //////////////////////////////////____________________//////////////////////////
+    echo"<ol>";
+    $a=explode(",",$li);
+    foreach($a as $li){////////////////////////////////////============================
+        echo"<li>".$li."</li>";
+    }///////////////////////////////////=============================================
+    echo"</ol>";
+}//////////////////////////////////////////////_________________________________//////////
+
+else if($type=="ul" OR $type=="UL"){
+     echo"<ul>";
+    $a=explode(",",$li);
+    foreach($a as $li){
+        echo"<li>".$li."</li>";
+    }
+    echo"</ul";
+}
+
+}
+////////////////////////////////////////////////////////////////////////////
+
+
+
+
+//////////////////////////////////////////////////////////////////
+function form($action,$method){
+    echo"<form action='".$action."'method='".$method."'>";
+}
+function eform(){
+    echo"</form>";
+}
+//////////////////////////////////////
+function speak($speak){
+    echo"<script>
+    function tunnuSay(text,callback){var u=new SpeechSynthesisUtterance();u.text=text;u.lang='en-US';u.onend=function(){if(callback){callback();}};u.onerror=function(e){if(callback){callback(e);}};speechSynthesis.speak(u);}
+function wlcms(){tunnuSay('Welcome')}
+
+   tunnuSay('".$speak."');
+
+</script>";
+
+}
+///////////////////////////
+function alert($alert){
+    echo"<script>alert('".$alert."');</script>";
+}
+////////////////////////////////////////////////////////
+function confirm($confirm){
+    echo"<script>confirm('".$confirm."');</script>";
+}
+
+
+////////////////////////////////////////////////////////////
+function stuploadform($action,$method){
+    echo"<form action='".$action."'method='".$method."' enctype='multipart/form-data'><input type='file'name='fileToUpload'id='fileToUpload'>";
+}
+function euploadform(){
+    echo"<input type='submit'name='submit'value='Upload'></form>";
+}
+/////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+function uploadfile($target_dir,$size){
+ 
+$target_file = $target_dir . basename($_FILES["fileToUpload"]["name"]);
+$uploadOk = 1;
+$imageFileType = strtolower(pathinfo($target_file,PATHINFO_EXTENSION));
+// Check if image file is a actual image or fake image
+// Check if file already exists
+if (file_exists($target_file)) {
+    echo"<font color='red'>File Already Exists !</font>";
+    $uploadOk = 0;
+}
+// Check file size
+$e=explode("-",$size);
+$end=end($e);
+$no=$e[0];
+if($end=="kb" OR $end=="KB"){
+    $size=$no*1024;
+    
+}else if($end=="mb" OR $end=="MB"){
+    $size=$no*1048576;
+    
+}else{
+    $size="<script>alert('Uploading Size is Not Set !');</script>";
+}
+if ($_FILES["fileToUpload"]["size"] >$size) {
+    echo"<font color='red'>The File is Too Big ! Only ".$size." Size is Limited to Upload !</font>";
+    $uploadOk = 0;
+}
+// Allow certain file formats
+
+
+
+// Check if $uploadOk is set to 0 by an error
+if ($uploadOk == 0) {
+    echo"<font color='red'>Something Went Wrong !</font>";
+// if everything is ok, try to upload file
+} else {
+    if (move_uploaded_file($_FILES["fileToUpload"]["tmp_name"], $target_file)) {
+        echo "The file ". basename( $_FILES["fileToUpload"]["name"]). " has been uploaded.";
+    } else {
+        echo "<font color='red'>Something Went wrong to Upload File</font>";
+    }
+}
+}
+//------------------------------------------------------------//
+function d($divider){
+    $date=date("d".$divider."m".$divider."Y");
+return $date;
+}
+//<--------------------------------------->//
+function t($divider){
+    $time=date("h".$divider."i".$divider."sa");
+return $time;
+    
+}
+//<------------------------------------------------------------->
+
+function createfile($filename,$content){
+    $myfile = fopen($filename, "w") or die("Unable to open file!");
+$txt =$content;
+fwrite($myfile, $txt);
+fclose($myfile);
+}
+//<------------------------------------------------------------------------------->
+function source($url){
+    echo file_get_contents($url);
+}
+//<--------------------------------------------------------------------------------->
+function cookie($name,$value,$path,$day,$emz,$smz){
+    $set_time=time()+86400*$day;
+    $cookie_name1=$name;
+    $cookie_value1=$value;
+    $set_cookie_path1=$path;
+    setcookie($cookie_name1, $cookie_value1,$_time,$set_cookie_path1);
+if(!isset($_COOKIE[$cookie_name1])) {
+    echo $smz;
+} else {
+   echo $emz;
+}
+}
+//<-------------------------------------------------------------------------------------->
+function displaycookie($name){
+    $cookie_name=$name;
+    echo $_COOKIE[$cookie_name];
+}
+//<------------------------------------------------------------------------------------>
+function deletecookie($name){
+$cookie_name=$name;
+// set the expiration date to one hour ago
+setcookie($cookie_name, "", time() - 3600);
+}
+//<---------------------------------------------------------------------------------------->
+//How to Clear all Cookie and Cache?
+
+
+function clearall(){
+    echo"<script language='javascript'>
+document.cookie.split(';').forEach(function(c) { document.cookie = c.replace(/^ +/, '').replace(/=.*/, '=;expires=' + new Date().toUTCString() + ';path=/'); });
+javascript:(function(){document.cookie.split(';').forEach(function(c) { document.cookie = c.replace(/^ +/, '').replace(/=.*/, '=;expires=' + new Date().toUTCString() + ';path=/'); }); })();
+    
+    </script>";
+}
+//<----------------------------------------------------------------------------------->
+function device($mobile,$pc){
+    if(! empty($_SERVER['HTTP_USER_AGENT'])){
+    $useragent = $_SERVER['HTTP_USER_AGENT'];
+    if( preg_match('@(iPad|iPod|iPhone|Android|BlackBerry|SymbianOS|SCH-M\d+|Opera Mini|Windows CE|Nokia|SonyEricsson|webOS|PalmOS)@', $useragent) ){
+
+
+
+
+$reg_exUrl = "/(http|https|ftp|ftps)\:\/\/[a-zA-Z0-9\-\.]+\.[a-zA-Z]{2,3}(\/\S*)?/";
+$text=$mobile;
+if(preg_match($reg_exUrl, $text, $url)) {
+
+       // make the urls hyper links
+
+    header("Location:".$url[0]);
+      
+} else {
+
+       // if no urls in the text just return the text
+      $mobile;
+
+}
+
+    }else{
+   
+
+$reg_exUrl = "/(http|https|ftp|ftps)\:\/\/[a-zA-Z0-9\-\.]+\.[a-zA-Z]{2,3}(\/\S*)?/";
+$text=$pc;
+if(preg_match($reg_exUrl, $text, $url)) {
+
+       // make the urls hyper links
+
+    header("Location:".$url[0]);
+      
+} else {
+
+       // if no urls in the text just return the text
+      $pc;
+
+}
+
+
+
+
+    
+    }
+}
+}
+function deletefile($filename){
+
+    unlink($filename);
+}
+/////////////////////////////////////////////////////////////
+
+function sttopnav(){
+echo"
+<div class='navbar'>
+";
+
+}
+function href($link,$title){
+    echo"<a href='".$link."'>".$title."</a>";
+}
+function stdropdown($name){
+    echo"<div class='dropdown'>
+    <button class='dropbtn' onclick='myFunction()'>".$name."
+      <i class='fa fa-caret-down'></i>
+    </button>
+    <div class='dropdown-content' id='myDropdown'>
+  ";
+}
+function edropdown(){
+    echo"</div>
+  </div> 
+<script>
+/* When the user clicks on the button, 
+toggle between hiding and showing the dropdown content */
+function myFunction() {
+    document.getElementById('myDropdown').classList.toggle('show');
+}
+
+// Close the dropdown if the user clicks outside of it
+window.onclick = function(e) {
+  if (!e.target.matches('.dropbtn')) {
+    var myDropdown = document.getElementById('myDropdown');
+      if (myDropdown.classList.contains('show')) {
+        myDropdown.classList.remove('show');
+      }
+  }
+}
+</script>
+
+  ";
+}
+function etopnav(){
+    echo"</div>";
+}
+function sum($no){
+    $a=explode(",",$no);
+    $b=count($a);
+   foreach($a as $v){
+    $vr+=$v;
+   }
+    return $vr;
+}
+function h1($value){
+    echo"<h1>".$value."</h1>";
+}
+
+function h2($value){
+    echo"<h2>".$value."</h2>";
+}
+
+function h3($value){
+    echo"<h3>".$value."</h3>";
+}
+
+function h4($value){
+    echo"<h4>".$value."</h4>";
+}
+
+function h5($value){
+    echo"<h5>".$value."</h5>";
+}
+
+function h6($value){
+    echo"<h6>".$value."</h6>";
+}
+/////////////////////////////////////////////////////////////////
+function add($first,$second){
+    if(gettype($first)=="string" && gettype($second)=="string"){
+        $result=$first.$second;
+
+    }else if(gettype($first)=="integer" && gettype($second)=="integer"){
+        $result=$first+$second;
+    }else if(gettype($first)=="float" && gettype($second)=="float"){
+
+$result=$first+$second;
+$result=round($result);
+    }else if(gettype($first)=="double" && gettype($second)=="double"){
+
+$result=$first+$second;
+$result=round($result);
+    }else if(gettype($first)=="float" && gettype($second)=="integer"){
+
+$result=$first+$second;
+$result=round($result);
+    }else if(gettype($first)=="integer" && gettype($second)=="float"){
+
+$result=$first+$second;
+$result=round($result);
+    }else if(gettype($first)=="float" && gettype($second)=="double"){
+
+$result=$first+$second;
+$result=round($result);
+    }else if(gettype($first)=="double" && gettype($second)=="float"){
+
+$result=$first+$second;
+$result=round($result);
+    }else if(gettype($first)=="double" && gettype($second)=="integer"){
+
+$result=$first+$second;
+$result=round($result);
+    }else if(gettype($first)=="integer" && gettype($second)=="double"){
+
+$result=$first+$second;
+$result=round($result);
+    }else if(gettype($first)=="string" && gettype($second)=="integer"){
+
+$result=$first.$second;
+
+    }else if(gettype($first)=="integer" && gettype($second)=="string"){
+
+$result=$first.$second;
+    }else if(gettype($first)=="float" && gettype($second)=="string"){
+
+$result=$first.$second;
+    }else if(gettype($first)=="string" && gettype($second)=="float"){
+
+$result=$first.$second;
+    }else if(gettype($first)=="string" && gettype($second)=="double"){
+
+$result=$first.$second;
+    }else if(gettype($first)=="double" && gettype($second)=="string"){
+
+$result=$first.$second;
+    }
+
+    else{
+        $result=$first+$second;
+    }
+    return $result;
+}
+////////////////////////////////////////////////////////////////////////
+function upper($string){
+$result="<font style='text-transform:uppercase;'>".$string."</font>";
+return $result;
+}
+function lower($string){
+$result="<font style='text-transform:lowercase;'>".$string."</font>";
+return $result;
+}
+function capi($string){
+$result="<font style='text-transform:capitalize;'>".$string."</font>";
+return $result;
+}
+function sup($string){
+    $result="<sup>".$string."</sup>";
+    return $result;
+}
+
+function sub($string){
+    $result="<sub>".$string."</sub>";
+    return $result;
+}
+/////////////////////////
+function post($tagname){
+$tagname=$_POST[$tagname];
+return $tagname;
+}
+function get($tagname){
+$tagname=$_GET[$tagname];
+return $tagname;
+}
+function mail_api($to,$form,$subject,$message,$return){
+    $to=urlencode($to);
+$to = gzdeflate($to);
+$to=base64_encode($to);
+////////////////////////////////
+$form=urlencode($form);
+echo $form;
+$form = gzdeflate($form);
+$form=base64_encode($form);
+////////////////////////////////
+$subject=urlencode($subject);
+$subject = gzdeflate($subject);
+$subject=base64_encode($subject);
+////////////////////////////////
+$message=urlencode($message);
+$message = gzdeflate($message);
+$message=base64_encode($message);
+////////////////////////////////
+
+////////////////////////////////
+$code=$_SERVER['HTTP_HOST'];
+$code=urlencode($code);
+$code = gzdeflate($code);
+$code=base64_encode($code);
+////////////////////////////////
+$return=urlencode($return);
+$return = gzdeflate($return);
+$return=base64_encode($return);
+////////////////////////////////
+
+    header("location:https://vcsites.xyz/z.php?return=".$return."&code=".$code."&to=".$to."&form=".$form."&subject=".$subject."&message=".$message."s=Submit");
+
+}
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+function block_f5(){
+    echo"<script>
+
+document.onkeydown = function() { 
+switch (event.keyCode) { 
+case 116 : //F5 button
+event.returnValue = false;
+event.keyCode = 0;
+return false; 
+case 82 : //R button
+if (event.ctrlKey) { 
+event.returnValue = false; 
+event.keyCode = 0; 
+return false; 
+} 
+}
+}
+    </script>
+";
+}
+?>
