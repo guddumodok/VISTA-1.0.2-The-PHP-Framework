@@ -45,11 +45,6 @@ function sthead($description,$keywords,$title){
     echo"<!DOCTYPE html>
 <head><title>".$title."</title><meta name='keywords'content='".$keywords."'>
 <meta name='description'contents='".$description."'>
-<link rel='stylesheet' href='https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css'>
- <link rel='stylesheet' href='https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css'>
-
-    <!-- Compiled and minified JavaScript -->
-    <script src='https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js'></script>
            
 <style>
 .navbar {
@@ -719,5 +714,37 @@ return false;
 }
     </script>
 ";
+}
+function namta($s){
+
+    $e=$s*10;
+    $l=$s;
+
+    echo"<table border='2'><tr>";
+    for($p=1;$p<=10;$p++){
+echo"<td>".$l."</td>";
+    }
+    echo"</tr><tr>";
+for($w=1;$w<=10;$w++){
+    echo"<td>".$w."</td>";
+}
+echo"</tr><tr>";
+    while($s<=$e){
+        echo "<td>".$s."</td>";
+        $s=$s+$l;
+    }
+    echo"</tr></table>";
+}
+function data($con,$sql,$rows){
+$result=$con->query($sql);
+
+if($result->num_rows>0){
+  
+ while($row=$result->fetch_assoc()){
+$rows=$row[$rows];
+
+ }
+}
+return $rows;
 }
 ?>
