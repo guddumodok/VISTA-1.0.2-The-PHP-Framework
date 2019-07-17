@@ -1,4 +1,2150 @@
+    
 <?php
+/*
+Developer Name:Guddu Modok
+Company Name:Guddu Modok & His Company Private Limited
+FrameWork Name:VISTA(Very Intellegent System For Technical Assignment)
+
+*/
+class vista{
+
+    private $con,$htaccess;
+
+  const
+    ERR_FILE_NOT_FOUND = 1,
+    ERR_FONT_FILE = 2,
+    ERR_FREETYPE_NOT_ENABLED = 3,
+    ERR_GD_NOT_ENABLED = 4,
+    ERR_INVALID_COLOR = 5,
+    ERR_INVALID_DATA_URI = 6,
+    ERR_INVALID_IMAGE = 7,
+    ERR_LIB_NOT_LOADED = 8,
+    ERR_UNSUPPORTED_FORMAT = 9,
+    ERR_WEBP_NOT_ENABLED = 10,
+    ERR_WRITE = 11;
+
+  protected $image, $mimeType, $exif;
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+  // Magic methods
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+
+  //
+  // Creates a new SimpleImage object.
+  //
+  //  $image (string) - An image file or a data URI to load.
+  //
+  public function __construct($image = null) {
+    // Check for the required GD extension
+    if(extension_loaded('gd')) {
+      // Ignore JPEG warnings that cause imagecreatefromjpeg() to fail
+      ini_set('gd.jpeg_ignore_warning', 1);
+    } else {
+      throw new \Exception('Required extension GD is not loaded.', self::ERR_GD_NOT_ENABLED);
+    }
+
+    // Load an image through the constructor
+    if(preg_match('/^data:(.*?);/', $image)) {
+      $this->fromdataurl($image);
+    } elseif($image) {
+      $this->fromfile($image);
+    }
+  }
+
+  //
+  // Destroys the image resource
+  //
+  public function __destruct() {
+    if($this->image !== null && get_resource_type($this->image) === 'gd') {
+      imagedestroy($this->image);
+    }
+  }
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+  // Loaders
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+
+  //
+  // Loads an image from a data URI.
+  //
+  //  $uri* (string) - A data URI.
+  //
+  // Returns a SimpleImage object.
+  //
+  public function fromdataurl($uri) {
+    // Basic formatting check
+    preg_match('/^data:(.*?);/', $uri, $matches);
+    if(!count($matches)) {
+      throw new \Exception('Invalid data URI.', self::ERR_INVALID_DATA_URI);
+    }
+
+    // Determine mime type
+    $this->mimeType = $matches[1];
+    if(!preg_match('/^image\/(gif|jpeg|png)$/', $this->mimeType)) {
+      throw new \Exception(
+        'Unsupported format: ' . $this->mimeType,
+        self::ERR_UNSUPPORTED_FORMAT
+      );
+    }
+
+    // Get image data
+    $uri = base64_decode(preg_replace('/^data:(.*?);base64,/', '', $uri));
+    $this->image = imagecreatefromstring($uri);
+    if(!$this->image) {
+      throw new \Exception("Invalid image data.", self::ERR_INVALID_IMAGE);
+    }
+
+    return $this;
+  }
+
+  //
+  // Loads an image from a file.
+  //
+  //  $file* (string) - The image file to load.
+  //
+  // Returns a SimpleImage object.
+  //
+  public function fromfile($file) {
+    // Check if the file exists and is readable. We're using fopen() instead of file_exists()
+    // because not all URL wrappers support the latter.
+    $handle = @fopen($file, 'r');
+    if($handle === false) {
+      throw new \Exception("File not found: $file", self::ERR_FILE_NOT_FOUND);
+    }
+    fclose($handle);
+
+    // Get image info
+    $info = getimagesize($file);
+    if($info === false) {
+      throw new \Exception("Invalid image file: $file", self::ERR_INVALID_IMAGE);
+    }
+    $this->mimeType = $info['mime'];
+
+    // Create image object from file
+    switch($this->mimeType) {
+    case 'image/gif':
+      // Load the gif
+      $gif = imagecreatefromgif($file);
+      if($gif) {
+        // Copy the gif over to a true color image to preserve its transparency. This is a
+        // workaround to prevent imagepalettetruecolor() from borking transparency.
+        $width = imagesx($gif);
+        $height = imagesy($gif);
+        $this->image = imagecreatetruecolor($width, $height);
+        $transparentColor = imagecolorallocatealpha($this->image, 0, 0, 0, 127);
+        imagecolortransparent($this->image, $transparentColor);
+        imagefill($this->image, 0, 0, $transparentColor);
+        imagecopy($this->image, $gif, 0, 0, 0, 0, $width, $height);
+        imagedestroy($gif);
+      }
+      break;
+    case 'image/jpeg':
+      $this->image = imagecreatefromjpeg($file);
+      break;
+    case 'image/png':
+      $this->image = imagecreatefrompng($file);
+      break;
+    case 'image/webp':
+      $this->image = imagecreatefromwebp($file);
+      break;
+    case 'image/bmp':
+    case 'image/x-ms-bmp':
+    case 'image/x-windows-bmp':
+      $this->image = imagecreatefrombmp($file);
+      break;
+    }
+    if(!$this->image) {
+      throw new \Exception("Unsupported format: " . $this->mimeType, self::ERR_UNSUPPORTED_FORMAT);
+    }
+
+    // Convert pallete images to true color images
+    imagepalettetotruecolor($this->image);
+
+    // Load exif data from JPEG images
+    if($this->mimeType === 'image/jpeg' && function_exists('exif_read_data')) {
+      $this->exif = @exif_read_data($file);
+    }
+
+    return $this;
+  }
+
+  //
+  // Creates a new image.
+  //
+  //  $width* (int) - The width of the image.
+  //  $height* (int) - The height of the image.
+  //  $color (string|array) - Optional fill color for the new image (default 'transparent').
+  //
+  // Returns a SimpleImage object.
+  //
+  public function fromnew($width, $height, $color = 'transparent') {
+    $this->image = imagecreatetruecolor($width, $height);
+
+    // Use PNG for dynamically created images because it's lossless and supports transparency
+    $this->mimeType = 'image/png';
+
+    // Fill the image with color
+    $this->fill($color);
+
+    return $this;
+  }
+
+  //
+  // Creates a new image from a string.
+  //
+  //  $string* (string) - The raw image data as a string. Example:
+  //
+  //    $string = file_get_contents('image.jpg');
+  //
+  // Returns a SimpleImage object.
+  //
+  public function fromstring($string) {
+    return $this->fromfile('data://;base64,' . base64_encode($string));
+  }
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+  // Savers
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+
+  //
+  // Generates an image.
+  //
+  //  $mimeType (string) - The image format to output as a mime type (defaults to the original mime
+  //    type).
+  //  $quality (int) - Image quality as a percentage (default 100).
+  //
+  // Returns an array containing the image data and mime type.
+  //
+  private function generate($mimeType = null, $quality = 100) {
+    // Format defaults to the original mime type
+    $mimeType = $mimeType ?: $this->mimeType;
+
+    // Ensure quality is a valid integer
+    if($quality === null) $quality = 100;
+    $quality = self::keepWithin((int) $quality, 0, 100);
+
+    // Capture output
+    ob_start();
+
+    // Generate the image
+    switch($mimeType) {
+    case 'image/gif':
+      imagesavealpha($this->image, true);
+      imagegif($this->image, null);
+      break;
+    case 'image/jpeg':
+      imageinterlace($this->image, true);
+      imagejpeg($this->image, null, $quality);
+      break;
+    case 'image/png':
+      imagesavealpha($this->image, true);
+      imagepng($this->image, null, round(9 * $quality / 100));
+      break;
+    case 'image/webp':
+      // Not all versions of PHP will have webp support enabled
+      if(!function_exists('imagewebp')) {
+        throw new \Exception(
+          'WEBP support is not enabled in your version of PHP.',
+          self::ERR_WEBP_NOT_ENABLED
+        );
+      }
+      imagesavealpha($this->image, true);
+      imagewebp($this->image, null, $quality);
+      break;
+    case 'image/bmp':
+    case 'image/x-ms-bmp':
+    case 'image/x-windows-bmp':
+      imageinterlace($this->image, true);
+      imagebmp($this->image, null, $quality);
+    break;
+    default:
+      throw new \Exception('Unsupported format: ' . $mimeType, self::ERR_UNSUPPORTED_FORMAT);
+    }
+
+    // Stop capturing
+    $data = ob_get_contents();
+    ob_end_clean();
+
+    return [
+      'data' => $data,
+      'mimeType' => $mimeType
+    ];
+  }
+
+  //
+  // Generates a data URI.
+  //
+  //  $mimeType (string) - The image format to output as a mime type (defaults to the original mime
+  //    type).
+  //  $quality (int) - Image quality as a percentage (default 100).
+  //
+  // Returns a string containing a data URI.
+  //
+  public function todataurl($mimeType = null, $quality = 100) {
+    $image = $this->generate($mimeType, $quality);
+
+    return 'data:' . $image['mimeType'] . ';base64,' . base64_encode($image['data']);
+  }
+
+  //
+  // Forces the image to be downloaded to the clients machine. Must be called before any output is
+  // sent to the screen.
+  //
+  //  $filename* (string) - The filename (without path) to send to the client (e.g. 'image.jpeg').
+  //  $mimeType (string) - The image format to output as a mime type (defaults to the original mime
+  //    type).
+  //  $quality (int) - Image quality as a percentage (default 100).
+  //
+  public function todownload($filename, $mimeType = null, $quality = 100) {
+    $image = $this->generate($mimeType, $quality);
+
+    // Set download headers
+    header('Cache-Control: must-revalidate, post-check=0, pre-check=0');
+    header('Content-Description: File Transfer');
+    header('Content-Length: ' . strlen($image['data']));
+    header('Content-Transfer-Encoding: Binary');
+    header('Content-Type: application/octet-stream');
+    header("Content-Disposition: attachment; filename=\"$filename\"");
+
+    echo $image['data'];
+
+    return $this;
+  }
+
+  //
+  // Writes the image to a file.
+  //
+  //  $mimeType (string) - The image format to output as a mime type (defaults to the original mime
+  //    type).
+  //  $quality (int) - Image quality as a percentage (default 100).
+  //
+  // Returns a SimpleImage object.
+  //
+  public function tofile($file, $mimeType = null, $quality = 100) {
+    $image = $this->generate($mimeType, $quality);
+
+    // Save the image to file
+    if(!file_put_contents($file, $image['data'])) {
+      throw new \Exception("Failed to write image to file: $file", self::ERR_WRITE);
+    }
+
+    return $this;
+  }
+
+  //
+  // Outputs the image to the screen. Must be called before any output is sent to the screen.
+  //
+  //  $mimeType (string) - The image format to output as a mime type (defaults to the original mime
+  //    type).
+  //  $quality (int) - Image quality as a percentage (default 100).
+  //
+  // Returns a SimpleImage object.
+  //
+  public function toscreen($mimeType = null, $quality = 100) {
+    $image = $this->generate($mimeType, $quality);
+
+    // Output the image to stdout
+    header('Content-Type: ' . $image['mimeType']);
+    echo $image['data'];
+
+    return $this;
+  }
+
+  //
+  // Generates an image string.
+  //
+  //  $mimeType (string) - The image format to output as a mime type (defaults to the original mime
+  //    type).
+  //  $quality (int) - Image quality as a percentage (default 100).
+  //
+  // Returns a SimpleImage object.
+  //
+  public function tostring($mimeType = null, $quality = 100) {
+    return $this->generate($mimeType, $quality)['data'];
+  }
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+  // Utilities
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+
+  //
+  // Ensures a numeric value is always within the min and max range.
+  //
+  //  $value* (int|float) - A numeric value to test.
+  //  $min* (int|float) - The minimum allowed value.
+  //  $max* (int|float) - The maximum allowed value.
+  //
+  // Returns an int|float value.
+  //
+  private static function keepWithin($value, $min, $max) {
+    if($value < $min) return $min;
+    if($value > $max) return $max;
+    return $value;
+  }
+
+  //
+  // Gets the image's current aspect ratio.
+  //
+  // Returns the aspect ratio as a float.
+  //
+  public function getaspectratio() {
+    return $this->getWidth() / $this->getHeight();
+  }
+
+  //
+  // Gets the image's exif data.
+  //
+  // Returns an array of exif data or null if no data is available.
+  //
+  public function getexif() {
+    return isset($this->exif) ? $this->exif : null;
+  }
+
+  //
+  // Gets the image's current height.
+  //
+  // Returns the height as an integer.
+  //
+  public function getHeight() {
+    return (int) imagesy($this->image);
+  }
+
+  //
+  // Gets the mime type of the loaded image.
+  //
+  // Returns a mime type string.
+  //
+  public function getMimeType() {
+    return $this->mimeType;
+  }
+
+  //
+  // Gets the image's current orientation.
+  //
+  // Returns a string: 'landscape', 'portrait', or 'square'
+  //
+  public function getOrientation() {
+    $width = $this->getWidth();
+    $height = $this->getHeight();
+
+    if($width > $height) return 'landscape';
+    if($width < $height) return 'portrait';
+    return 'square';
+  }
+
+  //
+  // Gets the resolution of the image
+  //
+  // Returns the resolution as an array of integers: [96, 96]
+  //
+  public function getResolution() {
+    return imageresolution($this->image);
+  }
+
+  //
+  // Gets the image's current width.
+  //
+  // Returns the width as an integer.
+  //
+  public function getWidth() {
+    return (int) imagesx($this->image);
+  }
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+  // Manipulation
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+
+  //
+  // Same as PHP's imagecopymerge, but works with transparent images. Used internally for overlay.
+  //
+  private static function imageCopyMergeAlpha($dstIm, $srcIm, $dstX, $dstY, $srcX, $srcY, $srcW, $srcH, $pct) {
+    // Are we merging with transparency?
+    if($pct < 100) {
+      // Disable alpha blending and "colorize" the image using a transparent color
+      imagealphablending($srcIm, false);
+      imagefilter($srcIm, IMG_FILTER_COLORIZE, 0, 0, 0, 127 * ((100 - $pct) / 100));
+    }
+
+    imagecopy($dstIm, $srcIm, $dstX, $dstY, $srcX, $srcY, $srcW, $srcH);
+
+    return true;
+  }
+
+  //
+  // Rotates an image so the orientation will be correct based on its exif data. It is safe to call
+  // this method on images that don't have exif data (no changes will be made).
+  //
+  // Returns a SimpleImage object.
+  //
+  public function autoOrient() {
+    $exif = $this->getexif();
+
+    if(!$exif || !isset($exif['Orientation'])){
+      return $this;
+    }
+
+    switch($exif['Orientation']) {
+    case 1: // Do nothing!
+      break;
+    case 2: // Flip horizontally
+      $this->flip('x');
+      break;
+    case 3: // Rotate 180 degrees
+      $this->rotate(180);
+      break;
+    case 4: // Flip vertically
+      $this->flip('y');
+      break;
+    case 5: // Rotate 90 degrees clockwise and flip vertically
+      $this->flip('y')->rotate(90);
+      break;
+    case 6: // Rotate 90 clockwise
+      $this->rotate(90);
+      break;
+    case 7: // Rotate 90 clockwise and flip horizontally
+      $this->flip('x')->rotate(90);
+      break;
+    case 8: // Rotate 90 counterclockwise
+      $this->rotate(-90);
+      break;
+    }
+
+    return $this;
+  }
+
+  //
+  // Proportionally resize the image to fit inside a specific width and height.
+  //
+  //  $maxWidth* (int) - The maximum width the image can be.
+  //  $maxHeight* (int) - The maximum height the image can be.
+  //
+  // Returns a SimpleImage object.
+  //
+  public function bestFit($maxWidth, $maxHeight) {
+    // If the image already fits, there's nothing to do
+    if($this->getWidth() <= $maxWidth && $this->getHeight() <= $maxHeight) {
+      return $this;
+    }
+
+    // Calculate max width or height based on orientation
+    if($this->getOrientation() === 'portrait') {
+      $height = $maxHeight;
+      $width = $maxHeight * $this->getaspectratio();
+    } else {
+      $width = $maxWidth;
+      $height = $maxWidth / $this->getaspectratio();
+    }
+
+    // Reduce to max width
+    if($width > $maxWidth) {
+      $width = $maxWidth;
+      $height = $width / $this->getaspectratio();
+    }
+
+    // Reduce to max height
+    if($height > $maxHeight) {
+      $height = $maxHeight;
+      $width = $height * $this->getaspectratio();
+    }
+
+    return $this->resize($width, $height);
+  }
+
+  //
+  // Crop the image.
+  //
+  //  $x1 - Top left x coordinate.
+  //  $y1 - Top left y coordinate.
+  //  $x2 - Bottom right x coordinate.
+  //  $y2 - Bottom right x coordinate.
+  //
+  // Returns a SimpleImage object.
+  //
+  public function crop($x1, $y1, $x2, $y2) {
+    // Keep crop within image dimensions
+    $x1 = self::keepWithin($x1, 0, $this->getWidth());
+    $x2 = self::keepWithin($x2, 0, $this->getWidth());
+    $y1 = self::keepWithin($y1, 0, $this->getHeight());
+    $y2 = self::keepWithin($y2, 0, $this->getHeight());
+
+    // Crop it
+    $this->image = imagecrop($this->image, [
+      'x' => min($x1, $x2),
+      'y' => min($y1, $y2),
+      'width' => abs($x2 - $x1),
+      'height' => abs($y2 - $y1)
+    ]);
+
+    return $this;
+  }
+
+  //
+  // Applies a duotone filter to the image.
+  //
+  //  $lightColor* (string|array) - The lightest color in the duotone.
+  //  $darkColor* (string|array) - The darkest color in the duotone.
+  //
+  // Returns a SimpleImage object.
+  //
+  function duotone($lightColor, $darkColor) {
+    $lightColor = self::normalizeColor($lightColor);
+    $darkColor = self::normalizeColor($darkColor);
+
+    // Calculate averages between light and dark colors
+    $redAvg = $lightColor['red'] - $darkColor['red'];
+    $greenAvg = $lightColor['green'] - $darkColor['green'];
+    $blueAvg = $lightColor['blue'] - $darkColor['blue'];
+
+    // Create a matrix of all possible duotone colors based on gray values
+    $pixels = [];
+    for($i = 0; $i <= 255; $i++) {
+      $grayAvg = $i / 255;
+      $pixels['red'][$i] = $darkColor['red'] + $grayAvg * $redAvg;
+      $pixels['green'][$i] = $darkColor['green'] + $grayAvg * $greenAvg;
+      $pixels['blue'][$i] = $darkColor['blue'] + $grayAvg * $blueAvg;
+    }
+
+    // Apply the filter pixel by pixel
+    for($x = 0; $x < $this->getWidth(); $x++) {
+      for($y = 0; $y < $this->getHeight(); $y++) {
+        $rgb = $this->getColorAt($x, $y);
+        $gray = min(255, round(0.299 * $rgb['red'] + 0.114 * $rgb['blue'] + 0.587 * $rgb['green']));
+        $this->dot($x, $y, [
+          'red' => $pixels['red'][$gray],
+          'green' => $pixels['green'][$gray],
+          'blue' => $pixels['blue'][$gray]
+        ]);
+      }
+    }
+
+    return $this;
+  }
+
+  //
+  // Proportionally resize the image to a specific height.
+  //
+  // **DEPRECATED:** This method was deprecated in version 3.2.2 and will be removed in version 4.0.
+  // Please use `resize(null, $height)` instead.
+  //
+  //  $height* (int) - The height to resize the image to.
+  //
+  // Returns a SimpleImage object.
+  //
+  public function fitToHeight($height) {
+    return $this->resize(null, $height);
+  }
+
+  //
+  // Proportionally resize the image to a specific width.
+  //
+  // **DEPRECATED:** This method was deprecated in version 3.2.2 and will be removed in version 4.0.
+  // Please use `resize($width, null)` instead.
+  //
+  //  $width* (int) - The width to resize the image to.
+  //
+  // Returns a SimpleImage object.
+  //
+  public function fitToWidth($width) {
+    return $this->resize($width, null);
+  }
+
+  //
+  // Flip the image horizontally or vertically.
+  //
+  //  $direction* (string) - The direction to flip: x|y|both
+  //
+  // Returns a SimpleImage object.
+  //
+  public function flip($direction) {
+    switch($direction) {
+    case 'x':
+      imageflip($this->image, IMG_FLIP_HORIZONTAL);
+      break;
+    case 'y':
+      imageflip($this->image, IMG_FLIP_VERTICAL);
+      break;
+    case 'both':
+      imageflip($this->image, IMG_FLIP_BOTH);
+      break;
+    }
+
+    return $this;
+  }
+
+  //
+  // Reduces the image to a maximum number of colors.
+  //
+  //  $max* (int) - The maximum number of colors to use.
+  //  $dither (bool) - Whether or not to use a dithering effect (default true).
+  //
+  // Returns a SimpleImage object.
+  //
+  public function maxColors($max, $dither = true) {
+    imagetruecolortopalette($this->image, $dither, max(1, $max));
+
+    return $this;
+  }
+
+  //
+  // Place an image on top of the current image.
+  //
+  //  $overlay* (string|SimpleImage) - The image to overlay. This can be a filename, a data URI, or
+  //    a SimpleImage object.
+  //  $anchor (string) - The anchor point: 'center', 'top', 'bottom', 'left', 'right', 'top left',
+  //    'top right', 'bottom left', 'bottom right' (default 'center')
+  //  $opacity (float) - The opacity level of the overlay 0-1 (default 1).
+  //  $xOffset (int) - Horizontal offset in pixels (default 0).
+  //  $yOffset (int) - Vertical offset in pixels (default 0).
+  //
+  // Returns a SimpleImage object.
+  //
+  public function overlay($overlay, $anchor = 'center', $opacity = 1, $xOffset = 0, $yOffset = 0) {
+    // Load overlay image
+    if(!($overlay instanceof SimpleImage)) {
+      $overlay = new vista($overlay);
+    }
+
+    // Convert opacity
+    $opacity = self::keepWithin($opacity, 0, 1) * 100;
+
+    // Determine placement
+    switch($anchor) {
+      case 'top left':
+        $x = $xOffset;
+        $y = $yOffset;
+        break;
+      case 'top right':
+        $x = $this->getWidth() - $overlay->getWidth() + $xOffset;
+        $y = $yOffset;
+        break;
+      case 'top':
+        $x = ($this->getWidth() / 2) - ($overlay->getWidth() / 2) + $xOffset;
+        $y = $yOffset;
+        break;
+      case 'bottom left':
+        $x = $xOffset;
+        $y = $this->getHeight() - $overlay->getHeight() + $yOffset;
+        break;
+      case 'bottom right':
+        $x = $this->getWidth() - $overlay->getWidth() + $xOffset;
+        $y = $this->getHeight() - $overlay->getHeight() + $yOffset;
+        break;
+      case 'bottom':
+        $x = ($this->getWidth() / 2) - ($overlay->getWidth() / 2) + $xOffset;
+        $y = $this->getHeight() - $overlay->getHeight() + $yOffset;
+        break;
+      case 'left':
+        $x = $xOffset;
+        $y = ($this->getHeight() / 2) - ($overlay->getHeight() / 2) + $yOffset;
+        break;
+      case 'right':
+        $x = $this->getWidth() - $overlay->getWidth() + $xOffset;
+        $y = ($this->getHeight() / 2) - ($overlay->getHeight() / 2) + $yOffset;
+        break;
+      default:
+        $x = ($this->getWidth() / 2) - ($overlay->getWidth() / 2) + $xOffset;
+        $y = ($this->getHeight() / 2) - ($overlay->getHeight() / 2) + $yOffset;
+        break;
+    }
+
+    // Perform the overlay
+    self::imageCopyMergeAlpha(
+      $this->image,
+      $overlay->image,
+      $x, $y,
+      0, 0,
+      $overlay->getWidth(),
+      $overlay->getHeight(),
+      $opacity
+    );
+
+    return $this;
+  }
+
+  //
+  // Resize an image to the specified dimensions. If only one dimension is specified, the image will
+  // be resized proportionally.
+  //
+  //  $width* (int) - The new image width.
+  //  $height* (int) - The new image height.
+  //
+  // Returns a SimpleImage object.
+  //
+  public function resize($width = null, $height = null) {
+    // No dimentions specified
+    if(!$width && !$height) {
+      return $this;
+    }
+
+    // Resize to width
+    if($width && !$height) {
+      $height = $width / $this->getaspectratio();
+    }
+
+    // Resize to height
+    if(!$width && $height) {
+      $width = $height * $this->getaspectratio();
+    }
+
+    // If the dimensions are the same, there's no need to resize
+    if($this->getWidth() === $width && $this->getHeight() === $height) {
+      return $this;
+    }
+
+    // We can't use imagescale because it doesn't seem to preserve transparency properly. The
+    // workaround is to create a new truecolor image, allocate a transparent color, and copy the
+    // image over to it using imagecopyresampled.
+    $newImage = imagecreatetruecolor($width, $height);
+    $transparentColor = imagecolorallocatealpha($newImage, 0, 0, 0, 127);
+    imagecolortransparent($newImage, $transparentColor);
+    imagefill($newImage, 0, 0, $transparentColor);
+    imagecopyresampled(
+      $newImage,
+      $this->image,
+      0, 0, 0, 0,
+      $width,
+      $height,
+      $this->getWidth(),
+      $this->getHeight()
+    );
+
+    // Swap out the new image
+    $this->image = $newImage;
+
+    return $this;
+  }
+
+  //
+  // Sets an image's resolution, as per https://www.php.net/manual/en/function.imageresolution.php
+  //
+  // $res_x* (int) - The horizontal resolution in DPI
+  // $res_y  (int) - The vertical resolution in DPI
+  //
+  // Returns a SimpleImage object.
+  //
+  public function resolution($res_x, $res_y = null) {
+    if(is_null($res_y)) {
+      imageresolution($this->image, $res_x);
+    } else {
+      imageresolution($this->image, $res_x, $res_y);
+    }
+
+    return $this;
+  }
+
+  //
+  // Rotates the image.
+  //
+  // $angle* (int) - The angle of rotation (-360 - 360).
+  // $backgroundColor (string|array) - The background color to use for the uncovered zone area
+  //   after rotation (default 'transparent').
+  //
+  // Returns a SimpleImage object.
+  //
+  public function rotate($angle, $backgroundColor = 'transparent') {
+    // Rotate the image on a canvas with the desired background color
+    $backgroundColor = $this->allocateColor($backgroundColor);
+
+    $this->image = imagerotate(
+      $this->image,
+      -(self::keepWithin($angle, -360, 360)),
+      $backgroundColor
+    );
+    imagecolortransparent($this->image, imagecolorallocatealpha($this->image, 0, 0, 0, 127));
+
+    return $this;
+  }
+
+  //
+  // Adds text to the image.
+  //
+  //  $text* (string) - The desired text.
+  //  $options (array) - An array of options.
+  //    - fontFile* (string) - The TrueType (or compatible) font file to use.
+  //    - size (int) - The size of the font in pixels (default 12).
+  //    - color (string|array) - The text color (default black).
+  //    - anchor (string) - The anchor point: 'center', 'top', 'bottom', 'left', 'right',
+  //      'top left', 'top right', 'bottom left', 'bottom right' (default 'center').
+  //    - xOffset (int) - The horizontal offset in pixels (default 0).
+  //    - yOffset (int) - The vertical offset in pixels (default 0).
+  //    - shadow (array) - Text shadow params.
+  //      - x* (int) - Horizontal offset in pixels.
+  //      - y* (int) - Vertical offset in pixels.
+  //      - color* (string|array) - The text shadow color.
+  //  $boundary (array) - If passed, this variable will contain an array with coordinates that
+  //    surround the text: [x1, y1, x2, y2, width, height]. This can be used for calculating the
+  //    text's position after it gets added to the image.
+  //
+  // Returns a SimpleImage object.
+  //
+  public function text($text, $options, &$boundary = null) {
+    // Check for freetype support
+    if(!function_exists('imagettftext')) {
+      throw new \Exception(
+        'Freetype support is not enabled in your version of PHP.',
+        self::ERR_FREETYPE_NOT_ENABLED
+      );
+    }
+
+    // Default options
+    $options = array_merge([
+      'fontFile' => null,
+      'size' => 12,
+      'color' => 'black',
+      'anchor' => 'center',
+      'xOffset' => 0,
+      'yOffset' => 0,
+      'shadow' => null
+    ], $options);
+
+    // Extract and normalize options
+    $fontFile = $options['fontFile'];
+    $size = ($options['size'] / 96) * 72; // Convert px to pt (72pt per inch, 96px per inch)
+    $color = $this->allocateColor($options['color']);
+    $anchor = $options['anchor'];
+    $xOffset = $options['xOffset'];
+    $yOffset = $options['yOffset'];
+    $angle = 0;
+
+    // Calculate the bounding box dimensions
+    //
+    // Since imagettfbox() returns a bounding box from the text's baseline, we can end up with
+    // different heights for different strings of the same font size. For example, 'type' will often
+    // be taller than 'text' because the former has a descending letter.
+    //
+    // To compensate for this, we create two bounding boxes: one to measure the cap height and
+    // another to measure the descender height. Based on that, we can adjust the text vertically
+    // to appear inside the box with a reasonable amount of consistency.
+    //
+    // See: https://github.com/claviska/SimpleImage/issues/165
+    //
+    $box = imagettfbbox($size, $angle, $fontFile, $text);
+    if(!$box) {
+      throw new \Exception("Unable to load font file: $fontFile", self::ERR_FONT_FILE);
+    }
+    $boxWidth = abs($box[6] - $box[2]);
+    $boxHeight = $options['size'];
+
+    // Determine cap height
+    $box = imagettfbbox($size, $angle, $fontFile, 'X');
+    $capHeight = abs($box[7] - $box[1]);
+
+    // Determine descender height
+    $box = imagettfbbox($size, $angle, $fontFile, 'X Qgjpqy');
+    $fullHeight = abs($box[7] - $box[1]);
+    $descenderHeight = $fullHeight - $capHeight;
+
+    // Determine position
+    switch($anchor) {
+    case 'top left':
+      $x = $xOffset;
+      $y = $yOffset + $boxHeight;
+      break;
+    case 'top right':
+      $x = $this->getWidth() - $boxWidth + $xOffset;
+      $y = $yOffset + $boxHeight;
+      break;
+    case 'top':
+      $x = ($this->getWidth() / 2) - ($boxWidth / 2) + $xOffset;
+      $y = $yOffset + $boxHeight;
+      break;
+    case 'bottom left':
+      $x = $xOffset;
+      $y = $this->getHeight() - $boxHeight + $yOffset + $boxHeight;
+      break;
+    case 'bottom right':
+      $x = $this->getWidth() - $boxWidth + $xOffset;
+      $y = $this->getHeight() - $boxHeight + $yOffset + $boxHeight;
+      break;
+    case 'bottom':
+      $x = ($this->getWidth() / 2) - ($boxWidth / 2) + $xOffset;
+      $y = $this->getHeight() - $boxHeight + $yOffset + $boxHeight;
+      break;
+    case 'left':
+      $x = $xOffset;
+      $y = ($this->getHeight() / 2) - (($boxHeight / 2) - $boxHeight) + $yOffset;
+      break;
+    case 'right';
+      $x = $this->getWidth() - $boxWidth + $xOffset;
+      $y = ($this->getHeight() / 2) - (($boxHeight / 2) - $boxHeight) + $yOffset;
+      break;
+    default: // center
+      $x = ($this->getWidth() / 2) - ($boxWidth / 2) + $xOffset;
+      $y = ($this->getHeight() / 2) - (($boxHeight / 2) - $boxHeight) + $yOffset;
+      break;
+    }
+
+    $x = (int) round($x);
+    $y = (int) round($y);
+
+    // Pass the boundary back by reference
+    $boundary = [
+      'x1' => $x,
+      'y1' => $y - $boxHeight, // $y is the baseline, not the top!
+      'x2' => $x + $boxWidth,
+      'y2' => $y,
+      'width' => $boxWidth,
+      'height' => $boxHeight
+    ];
+
+    // Text shadow
+    if(is_array($options['shadow'])) {
+      imagettftext(
+        $this->image,
+        $size,
+        $angle,
+        $x + $options['shadow']['x'],
+        $y + $options['shadow']['y'] - $descenderHeight,
+        $this->allocateColor($options['shadow']['color']),
+        $fontFile,
+        $text
+      );
+    }
+
+    // Draw the text
+    imagettftext($this->image, $size, $angle, $x, $y - $descenderHeight, $color, $fontFile, $text);
+
+    return $this;
+  }
+
+  //
+  // Creates a thumbnail image. This function attempts to get the image as close to the provided
+  // dimensions as possible, then crops the remaining overflow to force the desired size. Useful
+  // for generating thumbnail images.
+  //
+  //  $width* (int) - The thumbnail width.
+  //  $height* (int) - The thumbnail height.
+  //  $anchor (string) - The anchor point: 'center', 'top', 'bottom', 'left', 'right', 'top left',
+  //    'top right', 'bottom left', 'bottom right' (default 'center').
+  //
+  // Returns a SimpleImage object.
+  //
+  public function thumbnail($width, $height, $anchor = 'center') {
+    // Determine aspect ratios
+    $currentRatio = $this->getHeight() / $this->getWidth();
+    $targetRatio = $height / $width;
+
+    // Fit to height/width
+    if($targetRatio > $currentRatio) {
+      $this->resize(null, $height);
+    } else {
+      $this->resize($width, null);
+    }
+
+    switch($anchor) {
+    case 'top':
+      $x1 = floor(($this->getWidth() / 2) - ($width / 2));
+      $x2 = $width + $x1;
+      $y1 = 0;
+      $y2 = $height;
+      break;
+    case 'bottom':
+      $x1 = floor(($this->getWidth() / 2) - ($width / 2));
+      $x2 = $width + $x1;
+      $y1 = $this->getHeight() - $height;
+      $y2 = $this->getHeight();
+      break;
+    case 'left':
+      $x1 = 0;
+      $x2 = $width;
+      $y1 = floor(($this->getHeight() / 2) - ($height / 2));
+      $y2 = $height + $y1;
+      break;
+    case 'right':
+      $x1 = $this->getWidth() - $width;
+      $x2 = $this->getWidth();
+      $y1 = floor(($this->getHeight() / 2) - ($height / 2));
+      $y2 = $height + $y1;
+      break;
+    case 'top left':
+      $x1 = 0;
+      $x2 = $width;
+      $y1 = 0;
+      $y2 = $height;
+      break;
+    case 'top right':
+      $x1 = $this->getWidth() - $width;
+      $x2 = $this->getWidth();
+      $y1 = 0;
+      $y2 = $height;
+      break;
+    case 'bottom left':
+      $x1 = 0;
+      $x2 = $width;
+      $y1 = $this->getHeight() - $height;
+      $y2 = $this->getHeight();
+      break;
+    case 'bottom right':
+      $x1 = $this->getWidth() - $width;
+      $x2 = $this->getWidth();
+      $y1 = $this->getHeight() - $height;
+      $y2 = $this->getHeight();
+      break;
+    default:
+      $x1 = floor(($this->getWidth() / 2) - ($width / 2));
+      $x2 = $width + $x1;
+      $y1 = floor(($this->getHeight() / 2) - ($height / 2));
+      $y2 = $height + $y1;
+      break;
+    }
+
+    // Return the cropped thumbnail image
+    return $this->crop($x1, $y1, $x2, $y2);
+  }
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+  // Drawing
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+
+  //
+  // Draws an arc.
+  //
+  //  $x* (int) - The x coordinate of the arc's center.
+  //  $y* (int) - The y coordinate of the arc's center.
+  //  $width* (int) - The width of the arc.
+  //  $height* (int) - The height of the arc.
+  //  $start* (int) - The start of the arc in degrees.
+  //  $end* (int) - The end of the arc in degrees.
+  //  $color* (string|array) - The arc color.
+  //  $thickness (int|string) - Line thickness in pixels or 'filled' (default 1).
+  //
+  // Returns a SimpleImage object.
+  //
+  public function arc($x, $y, $width, $height, $start, $end, $color, $thickness = 1) {
+    // Allocate the color
+    $color = $this->allocateColor($color);
+
+    // Draw an arc
+    if($thickness === 'filled') {
+      imagesetthickness($this->image, 1);
+      imagefilledarc($this->image, $x, $y, $width, $height, $start, $end, $color, IMG_ARC_PIE);
+    } else {
+      imagesetthickness($this->image, $thickness);
+      imagearc($this->image, $x, $y, $width, $height, $start, $end, $color);
+    }
+
+    return $this;
+  }
+
+  //
+  // Draws a border around the image.
+  //
+  //  $color* (string|array) - The border color.
+  //  $thickness (int) - The thickness of the border (default 1).
+  //
+  // Returns a SimpleImage object.
+  //
+  public function border($color, $thickness = 1) {
+    $x1 = 0;
+    $y1 = 0;
+    $x2 = $this->getWidth() - 1;
+    $y2 = $this->getHeight() - 1;
+
+    // Draw a border rectangle until it reaches the correct width
+    for($i = 0; $i < $thickness; $i++) {
+      $this->rectangle($x1++, $y1++, $x2--, $y2--, $color);
+    }
+
+    return $this;
+  }
+
+  //
+  // Draws a single pixel dot.
+  //
+  //  $x* (int) - The x coordinate of the dot.
+  //  $y* (int) - The y coordinate of the dot.
+  //  $color* (string|array) - The dot color.
+  //
+  // Returns a SimpleImage object.
+  //
+  public function dot($x, $y, $color) {
+    $color = $this->allocateColor($color);
+    imagesetpixel($this->image, $x, $y, $color);
+
+    return $this;
+  }
+
+  //
+  // Draws an ellipse.
+  //
+  //  $x* (int) - The x coordinate of the center.
+  //  $y* (int) - The y coordinate of the center.
+  //  $width* (int) - The ellipse width.
+  //  $height* (int) - The ellipse height.
+  //  $color* (string|array) - The ellipse color.
+  //  $thickness (int|string) - Line thickness in pixels or 'filled' (default 1).
+  //
+  // Returns a SimpleImage object.
+  //
+  public function ellipse($x, $y, $width, $height, $color, $thickness = 1) {
+    // Allocate the color
+    $color = $this->allocateColor($color);
+
+    // Draw an ellipse
+    if($thickness === 'filled') {
+      imagesetthickness($this->image, 1);
+      imagefilledellipse($this->image, $x, $y, $width, $height, $color);
+    } else {
+      // imagesetthickness doesn't appear to work with imageellipse, so we work around it.
+      imagesetthickness($this->image, 1);
+      $i = 0;
+      while($i++ < $thickness * 2 - 1) {
+        imageellipse($this->image, $x, $y, --$width, $height--, $color);
+      }
+    }
+
+    return $this;
+  }
+
+  //
+  // Fills the image with a solid color.
+  //
+  //  $color (string|array) - The fill color.
+  //
+  // Returns a SimpleImage object.
+  //
+  public function fill($color) {
+    // Draw a filled rectangle over the entire image
+    $this->rectangle(0, 0, $this->getWidth(), $this->getHeight(), 'white', 'filled');
+
+    // Now flood it with the appropriate color
+    $color = $this->allocateColor($color);
+    imagefill($this->image, 0, 0, $color);
+
+    return $this;
+  }
+
+  //
+  // Draws a line.
+  //
+  //  $x1* (int) - The x coordinate for the first point.
+  //  $y1* (int) - The y coordinate for the first point.
+  //  $x2* (int) - The x coordinate for the second point.
+  //  $y2* (int) - The y coordinate for the second point.
+  //  $color (string|array) - The line color.
+  //  $thickness (int) - The line thickness (default 1).
+  //
+  // Returns a SimpleImage object.
+  //
+  public function line($x1, $y1, $x2, $y2, $color, $thickness = 1) {
+    // Allocate the color
+    $color = $this->allocateColor($color);
+
+    // Draw a line
+    imagesetthickness($this->image, $thickness);
+    imageline($this->image, $x1, $y1, $x2, $y2, $color);
+
+    return $this;
+  }
+
+  //
+  // Draws a polygon.
+  //
+  //  $vertices* (array) - The polygon's vertices in an array of x/y arrays. Example:
+  //    [
+  //      ['x' => x1, 'y' => y1],
+  //      ['x' => x2, 'y' => y2],
+  //      ['x' => xN, 'y' => yN]
+  //    ]
+  //  $color* (string|array) - The polygon color.
+  //  $thickness (int|string) - Line thickness in pixels or 'filled' (default 1).
+  //
+  // Returns a SimpleImage object.
+  //
+  public function polygon($vertices, $color, $thickness = 1) {
+    // Allocate the color
+    $color = $this->allocateColor($color);
+
+    // Convert [['x' => x1, 'y' => x1], ['x' => x1, 'y' => y2], ...] to [x1, y1, x2, y2, ...]
+    $points = [];
+    foreach($vertices as $vals) {
+      $points[] = $vals['x'];
+      $points[] = $vals['y'];
+    }
+
+    // Draw a polygon
+    if($thickness === 'filled') {
+      imagesetthickness($this->image, 1);
+      imagefilledpolygon($this->image, $points, count($vertices), $color);
+    } else {
+      imagesetthickness($this->image, $thickness);
+      imagepolygon($this->image, $points, count($vertices), $color);
+    }
+
+    return $this;
+  }
+
+  //
+  // Draws a rectangle.
+  //
+  //  $x1* (int) - The upper left x coordinate.
+  //  $y1* (int) - The upper left y coordinate.
+  //  $x2* (int) - The bottom right x coordinate.
+  //  $y2* (int) - The bottom right y coordinate.
+  //  $color* (string|array) - The rectangle color.
+  //  $thickness (int|string) - Line thickness in pixels or 'filled' (default 1).
+  //
+  // Returns a SimpleImage object.
+  //
+  public function rectangle($x1, $y1, $x2, $y2, $color, $thickness = 1) {
+    // Allocate the color
+    $color = $this->allocateColor($color);
+
+    // Draw a rectangle
+    if($thickness === 'filled') {
+      imagesetthickness($this->image, 1);
+      imagefilledrectangle($this->image, $x1, $y1, $x2, $y2, $color);
+    } else {
+      imagesetthickness($this->image, $thickness);
+      imagerectangle($this->image, $x1, $y1, $x2, $y2, $color);
+    }
+
+    return $this;
+  }
+
+  //
+  // Draws a rounded rectangle.
+  //
+  //  $x1* (int) - The upper left x coordinate.
+  //  $y1* (int) - The upper left y coordinate.
+  //  $x2* (int) - The bottom right x coordinate.
+  //  $y2* (int) - The bottom right y coordinate.
+  //  $radius* (int) - The border radius in pixels.
+  //  $color* (string|array) - The rectangle color.
+  //  $thickness (int|string) - Line thickness in pixels or 'filled' (default 1).
+  //
+  // Returns a SimpleImage object.
+  //
+  public function roundedRectangle($x1, $y1, $x2, $y2, $radius, $color, $thickness = 1) {
+    if($thickness === 'filled') {
+      // Draw the filled rectangle without edges
+      $this->rectangle($x1 + $radius + 1, $y1, $x2 - $radius - 1, $y2, $color, 'filled');
+      $this->rectangle($x1, $y1 + $radius + 1, $x1 + $radius, $y2 - $radius - 1, $color, 'filled');
+      $this->rectangle($x2 - $radius, $y1 + $radius + 1, $x2, $y2 - $radius - 1, $color, 'filled');
+      // Fill in the edges with arcs
+      $this->arc($x1 + $radius, $y1 + $radius, $radius * 2, $radius * 2, 180, 270, $color, 'filled');
+      $this->arc($x2 - $radius, $y1 + $radius, $radius * 2, $radius * 2, 270, 360, $color, 'filled');
+      $this->arc($x1 + $radius, $y2 - $radius, $radius * 2, $radius * 2, 90, 180, $color, 'filled');
+      $this->arc($x2 - $radius, $y2 - $radius, $radius * 2, $radius * 2, 360, 90, $color, 'filled');
+    } else {
+      // Draw the rectangle outline without edges
+      $this->line($x1 + $radius, $y1, $x2 - $radius, $y1, $color, $thickness);
+      $this->line($x1 + $radius, $y2, $x2 - $radius, $y2, $color, $thickness);
+      $this->line($x1, $y1 + $radius, $x1, $y2 - $radius, $color, $thickness);
+      $this->line($x2, $y1 + $radius, $x2, $y2 - $radius, $color, $thickness);
+      // Fill in the edges with arcs
+      $this->arc($x1 + $radius, $y1 + $radius, $radius * 2, $radius * 2, 180, 270, $color, $thickness);
+      $this->arc($x2 - $radius, $y1 + $radius, $radius * 2, $radius * 2, 270, 360, $color, $thickness);
+      $this->arc($x1 + $radius, $y2 - $radius, $radius * 2, $radius * 2, 90, 180, $color, $thickness);
+      $this->arc($x2 - $radius, $y2 - $radius, $radius * 2, $radius * 2, 360, 90, $color, $thickness);
+    }
+
+    return $this;
+  }
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+  // Filters
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+
+  //
+  // Applies the blur filter.
+  //
+  //  $type (string) - The blur algorithm to use: 'selective', 'gaussian' (default 'gaussian').
+  //  $passes (int) - The number of time to apply the filter, enhancing the effect (default 1).
+  //
+  // Returns a SimpleImage object.
+  //
+  public function blur($type = 'selective', $passes = 1) {
+    $filter = $type === 'gaussian' ? IMG_FILTER_GAUSSIAN_BLUR : IMG_FILTER_SELECTIVE_BLUR;
+
+    for($i = 0; $i < $passes; $i++) {
+      imagefilter($this->image, $filter);
+    }
+
+    return $this;
+  }
+
+  //
+  // Applies the brightness filter to brighten the image.
+  //
+  //  $percentage* (int) - Percentage to brighten the image (0 - 100).
+  //
+  // Returns a SimpleImage object.
+  //
+  public function brighten($percentage) {
+    $percentage = self::keepWithin(255 * $percentage / 100, 0, 255);
+
+    imagefilter($this->image, IMG_FILTER_BRIGHTNESS, $percentage);
+
+    return $this;
+  }
+
+  //
+  // Applies the colorize filter.
+  //
+  //  $color* (string|array) - The filter color.
+  //
+  // Returns a SimpleImage object.
+  //
+  public function colorize($color) {
+    $color = self::normalizeColor($color);
+
+    imagefilter(
+      $this->image,
+      IMG_FILTER_COLORIZE,
+      $color['red'],
+      $color['green'],
+      $color['blue'],
+      127 - ($color['alpha'] * 127)
+    );
+
+    return $this;
+  }
+
+  //
+  // Applies the contrast filter.
+  //
+  //  $percentage* (int) - Percentage to adjust (-100 - 100).
+  //
+  // Returns a SimpleImage object.
+  //
+  public function contrast($percentage) {
+    imagefilter($this->image, IMG_FILTER_CONTRAST, self::keepWithin($percentage, -100, 100));
+
+    return $this;
+  }
+
+  //
+  // Applies the brightness filter to darken the image.
+  //
+  //  $percentage* (int) - Percentage to darken the image (0 - 100).
+  //
+  // Returns a SimpleImage object.
+  //
+  public function darken($percentage) {
+    $percentage = self::keepWithin(255 * $percentage / 100, 0, 255);
+
+    imagefilter($this->image, IMG_FILTER_BRIGHTNESS, -$percentage);
+
+    return $this;
+  }
+
+  //
+  // Applies the desaturate (grayscale) filter.
+  //
+  // Returns a SimpleImage object.
+  //
+  public function desaturate() {
+    imagefilter($this->image, IMG_FILTER_GRAYSCALE);
+
+    return $this;
+  }
+
+  //
+  // Applies the edge detect filter.
+  //
+  // Returns a SimpleImage object.
+  //
+  public function edgeDetect() {
+    imagefilter($this->image, IMG_FILTER_EDGEDETECT);
+
+    return $this;
+  }
+
+  //
+  // Applies the emboss filter.
+  //
+  // Returns a SimpleImage object.
+  //
+  public function emboss() {
+    imagefilter($this->image, IMG_FILTER_EMBOSS);
+
+    return $this;
+  }
+
+  //
+  // Inverts the image's colors.
+  //
+  // Returns a SimpleImage object.
+  //
+  public function invert() {
+    imagefilter($this->image, IMG_FILTER_NEGATE);
+
+    return $this;
+  }
+
+  //
+  // Changes the image's opacity level.
+  //
+  //  $opacity* (float) - The desired opacity level (0 - 1).
+  //
+  // Returns a SimpleImage object.
+  //
+  public function opacity($opacity) {
+    // Create a transparent image
+    $newImage = new SimpleImage();
+    $newImage->fromnew($this->getWidth(), $this->getHeight());
+
+    // Copy the current image (with opacity) onto the transparent image
+    self::imageCopyMergeAlpha(
+      $newImage->image,
+      $this->image,
+      0, 0,
+      0, 0,
+      $this->getWidth(),
+      $this->getHeight(),
+      self::keepWithin($opacity, 0, 1) * 100
+    );
+
+    return $this;
+  }
+
+  //
+  // Applies the pixelate filter.
+  //
+  //  $size (int) - The size of the blocks in pixels (default 10).
+  //
+  // Returns a SimpleImage object.
+  //
+  public function pixelate($size = 10) {
+    imagefilter($this->image, IMG_FILTER_PIXELATE, $size, true);
+
+    return $this;
+  }
+
+  //
+  // Simulates a sepia effect by desaturating the image and applying a sepia tone.
+  //
+  // Returns a SimpleImage object.
+  //
+  public function sepia() {
+    imagefilter($this->image, IMG_FILTER_GRAYSCALE);
+    imagefilter($this->image, IMG_FILTER_COLORIZE, 70, 35, 0);
+
+    return $this;
+  }
+
+  //
+  // Sharpens the image.
+  //
+  //  $amount (int) - Sharpening amount (default 50)
+  //
+  // Returns a SimpleImage object.
+  //
+  public function sharpen($amount = 50) {
+    // Normalize amount
+    $amount = max(1, min(100, $amount)) / 100;
+
+    $sharpen = [
+      [-1, -1, -1],
+      [-1,  8 / $amount, -1],
+      [-1, -1, -1],
+    ];
+    $divisor = array_sum(array_map('array_sum', $sharpen));
+
+    imageconvolution($this->image, $sharpen, $divisor, 0);
+
+    return $this;
+  }
+
+  //
+  // Applies the mean remove filter to produce a sketch effect.
+  //
+  // Returns a SimpleImage object.
+  //
+  public function sketch() {
+    imagefilter($this->image, IMG_FILTER_MEAN_REMOVAL);
+
+    return $this;
+  }
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+  // Color utilities
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+
+  //
+  // Converts a "friendly color" into a color identifier for use with GD's image functions.
+  //
+  //  $image (resource) - The target image.
+  //  $color (string|array) - The color to allocate.
+  //
+  // Returns a color identifier.
+  //
+  private function allocateColor($color) {
+    $color = self::normalizeColor($color);
+
+    // Was this color already allocated?
+    $index = imagecolorexactalpha(
+      $this->image,
+      $color['red'],
+      $color['green'],
+      $color['blue'],
+      127 - ($color['alpha'] * 127)
+    );
+    if($index > -1) {
+      // Yes, return this color index
+      return $index;
+    }
+
+    // Allocate a new color index
+    return imagecolorallocatealpha(
+      $this->image,
+      $color['red'],
+      $color['green'],
+      $color['blue'],
+      127 - ($color['alpha'] * 127)
+    );
+  }
+
+  //
+  // Adjusts a color by increasing/decreasing red/green/blue/alpha values independently.
+  //
+  //  $color* (string|array) - The color to adjust.
+  //  $red* (int) - Red adjustment (-255 - 255).
+  //  $green* (int) - Green adjustment (-255 - 255).
+  //  $blue* (int) - Blue adjustment (-255 - 255).
+  //  $alpha* (float) - Alpha adjustment (-1 - 1).
+  //
+  // Returns an RGBA color array.
+  //
+  public static function adjustColor($color, $red, $green, $blue, $alpha) {
+    // Normalize to RGBA
+    $color = self::normalizeColor($color);
+
+    // Adjust each channel
+    return self::normalizeColor([
+      'red' => $color['red'] + $red,
+      'green' => $color['green'] + $green,
+      'blue' => $color['blue'] + $blue,
+      'alpha' => $color['alpha'] + $alpha
+    ]);
+  }
+
+  //
+  // Darkens a color.
+  //
+  //  $color* (string|array) - The color to darken.
+  //  $amount* (int) - Amount to darken (0 - 255).
+  //
+  // Returns an RGBA color array.
+  //
+  public static function darkenColor($color, $amount) {
+    return self::adjustColor($color, -$amount, -$amount, -$amount, 0);
+  }
+
+  //
+  // Extracts colors from an image like a human would do.™ This method requires the third-party
+  // library \League\ColorExtractor. If you're using Composer, it will be installed for you
+  // automatically.
+  //
+  //  $count (int) - The max number of colors to extract (default 5).
+  //  $backgroundColor (string|array) - By default any pixel with alpha value greater than zero will
+  //    be discarded. This is because transparent colors are not perceived as is. For example, fully
+  //    transparent black would be seen white on a white background. So if you want to take
+  //    transparency into account, you have to specify a default background color.
+  //
+  // Returns an array of RGBA colors arrays.
+  //
+  public function extractColors($count = 5, $backgroundColor = null) {
+    // Check for required library
+    if(!class_exists('\League\ColorExtractor\ColorExtractor')) {
+      throw new \Exception(
+        'Required library \League\ColorExtractor is missing.',
+        self::ERR_LIB_NOT_LOADED
+      );
+    }
+
+    // Convert background color to an integer value
+    if($backgroundColor) {
+      $backgroundColor = self::normalizeColor($backgroundColor);
+      $backgroundColor = \League\ColorExtractor\Color::fromRgbToInt([
+        'r' => $backgroundColor['red'],
+        'g' => $backgroundColor['green'],
+        'b' => $backgroundColor['blue']
+      ]);
+    }
+
+    // Extract colors from the image
+    $palette = \League\ColorExtractor\Palette::fromGD($this->image, $backgroundColor);
+    $extractor = new \League\ColorExtractor\ColorExtractor($palette);
+    $colors = $extractor->extract($count);
+
+    // Convert colors to an RGBA color array
+    foreach($colors as $key => $value) {
+      $colors[$key] = self::normalizeColor(\League\ColorExtractor\Color::fromIntToHex($value));
+    }
+
+    return $colors;
+  }
+
+  //
+  // Gets the RGBA value of a single pixel.
+  //
+  //  $x* (int) - The horizontal position of the pixel.
+  //  $y* (int) - The vertical position of the pixel.
+  //
+  // Returns an RGBA color array or false if the x/y position is off the canvas.
+  //
+  public function getColorAt($x, $y) {
+    // Coordinates must be on the canvas
+    if($x < 0 || $x > $this->getWidth() || $y < 0 || $y > $this->getHeight()) {
+      return false;
+    }
+
+    // Get the color of this pixel and convert it to RGBA
+    $color = imagecolorat($this->image, $x, $y);
+    $rgba = imagecolorsforindex($this->image, $color);
+    $rgba['alpha'] = 127 - ($color >> 24) & 0xFF;
+
+    return $rgba;
+  }
+
+  //
+  // Lightens a color.
+  //
+  //  $color* (string|array) - The color to lighten.
+  //  $amount* (int) - Amount to darken (0 - 255).
+  //
+  // Returns an RGBA color array.
+  //
+  public static function lightenColor($color, $amount) {
+    return self::adjustColor($color, $amount, $amount, $amount, 0);
+  }
+
+  //
+  // Normalizes a hex or array color value to a well-formatted RGBA array.
+  //
+  //  $color* (string|array) - A CSS color name, hex string, or an array [red, green, blue, alpha].
+  //    You can pipe alpha transparency through hex strings and color names. For example:
+  //
+  //      #fff|0.50 <-- 50% white
+  //      red|0.25 <-- 25% red
+  //
+  // Returns an array: [red, green, blue, alpha]
+  //
+  public static function normalizeColor($color) {
+    // 140 CSS color names and hex values
+    $cssColors = [
+      'aliceblue' => '#f0f8ff', 'antiquewhite' => '#faebd7', 'aqua' => '#00ffff',
+      'aquamarine' => '#7fffd4', 'azure' => '#f0ffff', 'beige' => '#f5f5dc', 'bisque' => '#ffe4c4',
+      'black' => '#000000', 'blanchedalmond' => '#ffebcd', 'blue' => '#0000ff',
+      'blueviolet' => '#8a2be2', 'brown' => '#a52a2a', 'burlywood' => '#deb887',
+      'cadetblue' => '#5f9ea0', 'chartreuse' => '#7fff00', 'chocolate' => '#d2691e',
+      'coral' => '#ff7f50', 'cornflowerblue' => '#6495ed', 'cornsilk' => '#fff8dc',
+      'crimson' => '#dc143c', 'cyan' => '#00ffff', 'darkblue' => '#00008b', 'darkcyan' => '#008b8b',
+      'darkgoldenrod' => '#b8860b', 'darkgray' => '#a9a9a9', 'darkgrey' => '#a9a9a9',
+      'darkgreen' => '#006400', 'darkkhaki' => '#bdb76b', 'darkmagenta' => '#8b008b',
+      'darkolivegreen' => '#556b2f', 'darkorange' => '#ff8c00', 'darkorchid' => '#9932cc',
+      'darkred' => '#8b0000', 'darksalmon' => '#e9967a', 'darkseagreen' => '#8fbc8f',
+      'darkslateblue' => '#483d8b', 'darkslategray' => '#2f4f4f', 'darkslategrey' => '#2f4f4f',
+      'darkturquoise' => '#00ced1', 'darkviolet' => '#9400d3', 'deeppink' => '#ff1493',
+      'deepskyblue' => '#00bfff', 'dimgray' => '#696969', 'dimgrey' => '#696969',
+      'dodgerblue' => '#1e90ff', 'firebrick' => '#b22222', 'floralwhite' => '#fffaf0',
+      'forestgreen' => '#228b22', 'fuchsia' => '#ff00ff', 'gainsboro' => '#dcdcdc',
+      'ghostwhite' => '#f8f8ff', 'gold' => '#ffd700', 'goldenrod' => '#daa520', 'gray' => '#808080',
+      'grey' => '#808080', 'green' => '#008000', 'greenyellow' => '#adff2f',
+      'honeydew' => '#f0fff0', 'hotpink' => '#ff69b4', 'indianred ' => '#cd5c5c',
+      'indigo ' => '#4b0082', 'ivory' => '#fffff0', 'khaki' => '#f0e68c', 'lavender' => '#e6e6fa',
+      'lavenderblush' => '#fff0f5', 'lawngreen' => '#7cfc00', 'lemonchiffon' => '#fffacd',
+      'lightblue' => '#add8e6', 'lightcoral' => '#f08080', 'lightcyan' => '#e0ffff',
+      'lightgoldenrodyellow' => '#fafad2', 'lightgray' => '#d3d3d3', 'lightgrey' => '#d3d3d3',
+      'lightgreen' => '#90ee90', 'lightpink' => '#ffb6c1', 'lightsalmon' => '#ffa07a',
+      'lightseagreen' => '#20b2aa', 'lightskyblue' => '#87cefa', 'lightslategray' => '#778899',
+      'lightslategrey' => '#778899', 'lightsteelblue' => '#b0c4de', 'lightyellow' => '#ffffe0',
+      'lime' => '#00ff00', 'limegreen' => '#32cd32', 'linen' => '#faf0e6', 'magenta' => '#ff00ff',
+      'maroon' => '#800000', 'mediumaquamarine' => '#66cdaa', 'mediumblue' => '#0000cd',
+      'mediumorchid' => '#ba55d3', 'mediumpurple' => '#9370db', 'mediumseagreen' => '#3cb371',
+      'mediumslateblue' => '#7b68ee', 'mediumspringgreen' => '#00fa9a',
+      'mediumturquoise' => '#48d1cc', 'mediumvioletred' => '#c71585', 'midnightblue' => '#191970',
+      'mintcream' => '#f5fffa', 'mistyrose' => '#ffe4e1', 'moccasin' => '#ffe4b5',
+      'navajowhite' => '#ffdead', 'navy' => '#000080', 'oldlace' => '#fdf5e6', 'olive' => '#808000',
+      'olivedrab' => '#6b8e23', 'orange' => '#ffa500', 'orangered' => '#ff4500',
+      'orchid' => '#da70d6', 'palegoldenrod' => '#eee8aa', 'palegreen' => '#98fb98',
+      'paleturquoise' => '#afeeee', 'palevioletred' => '#db7093', 'papayawhip' => '#ffefd5',
+      'peachpuff' => '#ffdab9', 'peru' => '#cd853f', 'pink' => '#ffc0cb', 'plum' => '#dda0dd',
+      'powderblue' => '#b0e0e6', 'purple' => '#800080', 'rebeccapurple' => '#663399',
+      'red' => '#ff0000', 'rosybrown' => '#bc8f8f', 'royalblue' => '#4169e1',
+      'saddlebrown' => '#8b4513', 'salmon' => '#fa8072', 'sandybrown' => '#f4a460',
+      'seagreen' => '#2e8b57', 'seashell' => '#fff5ee', 'sienna' => '#a0522d',
+      'silver' => '#c0c0c0', 'skyblue' => '#87ceeb', 'slateblue' => '#6a5acd',
+      'slategray' => '#708090', 'slategrey' => '#708090', 'snow' => '#fffafa',
+      'springgreen' => '#00ff7f', 'steelblue' => '#4682b4', 'tan' => '#d2b48c', 'teal' => '#008080',
+      'thistle' => '#d8bfd8', 'tomato' => '#ff6347', 'turquoise' => '#40e0d0',
+      'violet' => '#ee82ee', 'wheat' => '#f5deb3', 'white' => '#ffffff', 'whitesmoke' => '#f5f5f5',
+      'yellow' => '#ffff00', 'yellowgreen' => '#9acd32'
+    ];
+
+    // Parse alpha from '#fff|.5' and 'white|.5'
+    if(is_string($color) && strstr($color, '|')) {
+      $color = explode('|', $color);
+      $alpha = (float) $color[1];
+      $color = trim($color[0]);
+    } else {
+      $alpha = 1;
+    }
+
+    // Translate CSS color names to hex values
+    if(is_string($color) && array_key_exists(strtolower($color), $cssColors)) {
+      $color = $cssColors[strtolower($color)];
+    }
+
+    // Translate transparent keyword to a transparent color
+    if($color === 'transparent') {
+      $color = ['red' => 0, 'green' => 0, 'blue' => 0, 'alpha' => 0];
+    }
+
+    // Convert hex values to RGBA
+    if(is_string($color)) {
+      // Remove #
+      $hex = preg_replace('/^#/', '', $color);
+
+      // Support short and standard hex codes
+      if(strlen($hex) === 3) {
+        list($red, $green, $blue) = [
+          $hex[0] . $hex[0],
+          $hex[1] . $hex[1],
+          $hex[2] . $hex[2]
+        ];
+      } elseif(strlen($hex) === 6) {
+        list($red, $green, $blue) = [
+          $hex[0] . $hex[1],
+          $hex[2] . $hex[3],
+          $hex[4] . $hex[5]
+        ];
+      } else {
+        throw new \Exception("Invalid color value: $color", self::ERR_INVALID_COLOR);
+      }
+
+      // Turn color into an array
+      $color = [
+        'red' => hexdec($red),
+        'green' => hexdec($green),
+        'blue' => hexdec($blue),
+        'alpha' => $alpha
+      ];
+    }
+
+    // Enforce color value ranges
+    if(is_array($color)) {
+      // RGB default to 0
+      $color['red'] = isset($color['red']) ? $color['red'] : 0;
+      $color['green'] = isset($color['green']) ? $color['green'] : 0;
+      $color['blue'] = isset($color['blue']) ? $color['blue'] : 0;
+
+      // Alpha defaults to 1
+      $color['alpha'] = isset($color['alpha']) ? $color['alpha'] : 1;
+
+      return [
+        'red' => (int) self::keepWithin((int) $color['red'], 0, 255),
+        'green' => (int) self::keepWithin((int) $color['green'], 0, 255),
+        'blue' => (int) self::keepWithin((int) $color['blue'], 0, 255),
+        'alpha' => self::keepWithin($color['alpha'], 0, 1)
+      ];
+    }
+
+    throw new \Exception("Invalid color value: $color", self::ERR_INVALID_COLOR);
+  }
+
+
+
+    public function get_connection($var){
+        $this->con=$var;
+    }
+
+
+
+function deviceinfo($data){
+$app=$_SERVER['HTTP_USER_AGENT'];
+$app=explode("/",$app);
+$device=$app[1];
+$device=explode(";",$device);
+$version=$device[1];
+$handset=$device[2];
+$handset=explode(")",$handset);
+$handset=$handset[0];
+$handset=str_replace("Build","",$handset);
+$appname=$app[6];
+$appversion=$app[7];
+
+    if($data=="version"){
+        return $version;
+    }else if($data=="name"){
+        return $appname;
+    }
+}
+
+function googlefont($fontname){
+echo"<link href='https://fonts.googleapis.com/css?family=".$fontname."' rel='stylesheet'>";
+}
+function help($query){
+    if($query=="ALL" OR $query=="all"){
+        echo"<div style='background-color:black;color:white;padding:20px;border-radius:20px;font-size:25px;'><h1 style='text-align:center;'>Help Page of VISTA</h1>
+        <ol>
+<li>
+
+        <b style='color:green;'>redirect(target link);</b> :-Redirect to the Target Location
+        </li><hr>
+<li><b style='color:green;'>
+timeredirect(time,target link);</b>:-Redirect you to the target link when the time is up.<br>example~   timeredirect(\"0-s\",\"www.vcsites.xyz\");<br>
+This Function help you to redirect you when the page load then 0 second  up then you redirect you in www.vcsites.xyz.Here You can 0-s mean 0 second,0-m mean 0 minute,0-h mean 0 hours.</li><hr><li><b style='color:green;'>
+p(\"anything\");</b>:- Display any output.Its also help you to display array or objects.</li><hr>
+<li><b style='color:green;'>en(\"value\");</b>:-break lines how much you enter your value;</li><hr>
+<li><b style='color:green;'>sthead() ; </b>:-start head tag .
+</li><hr>
+<li><b style='color:green;'>ehead() ; </b>:-End Head tag.
+</li><hr>
+<li><b style='color:green;'> hideerror(); </b>:-Hide all Error and warnings.
+</li><hr>
+<li><b style='color:green;'> rightclick(); </b>:-Start a Right Click option .
+</li><hr>
+<li><b style='color:green;'> rc_menu(\"name\",\"link\"); </b>:-Add menu option.
+</li><hr>
+<li><b style='color:green;'> erightclick(); </b>:-End Right Click Option.
+</li><hr>
+<li><b style='color:green;'> input(\"type\",\"name\",\"placeholder/value\"); </b>:-Insert a input type.
+</li><hr>
+<li><b style='color:green;'> select(\"name\",\"option names\"); </b>:-insert a select type.
+</li><hr>
+<li><b style='color:green;'> menu(\"type\",\"menu lists\"); </b>:-Insert a menu option like order,unorder.
+</li><hr>
+<li><b style='color:green;'> form(\"action\".\"method\"); </b>:-Open a form tag.
+
+</li><hr>
+<li><b style='color:green;'> eform(); </b>:-End Form tag.
+</li><hr>
+<li><b style='color:green;'> speak(\"speak something\"); </b>:-Speaking text.
+</li><hr>
+<li><b style='color:green;'> alert(\"hellow\"); </b>:-Alert something.
+</li><hr>
+<li><b style='color:green;'> confirm(\"hellow world\"); </b>:-Confirm box
+
+</li><hr>
+<li><b style='color:green;'> 
+stuploadform(\"action\",\"method\")
+; </b>:-start a file uploadig form.
+
+</li><hr>
+<li><b style='color:green;'> euploadform(); </b>:-End uploadig form.
+
+</li><hr>
+<li><b style='color:green;'> uploadfile(\"target_dir\",\"size\"); </b>:-Upload a file.
+
+</li><hr>
+<li><b style='color:green;'> d(\"/\"); </b>:-Date.
+
+</li><hr>
+<li><b style='color:green;'> t(\":\"); </b>:-Time
+
+</li><hr>
+<li><b style='color:green;'> createfile(\"filename\",\"content\"); </b>:-Create a File.
+
+</li><hr>
+<li><b style='color:green;'> source(\"url\"); </b>:-source code.
+
+</li><hr>
+<li><b style='color:green;'> cookie(\"Cookie name\",\"value\",\"day\"); </b>:-Create a Cookie.
+
+</li><hr>
+<li><b style='color:green;'> displaycookie(\"Cookie name\"); </b>:-Display Cookie Value.
+
+</li><hr>
+<li><b style='color:green;'> deletecookie(\"Cookie name\"); </b>:-Delete a Cookie.
+
+</li><hr>
+<li><b style='color:green;'> clearall(); </b>:-Clear All Cookies and Cache.
+
+</li><hr>
+<li><b style='color:green;'> device(\"mobile URL \",\"pc URl \"); </b>:-Automatic Redirect the correct URl.If That is moile than system redirect in Mobile link else laptop link.
+
+</li><hr>
+<li><b style='color:green;'> deletefile(\"filename\"); </b>:-Delete a File.
+
+</li><hr>
+<li><b style='color:green;'> sttopnav(); </b>:-Start a top nav bar.
+
+</li><hr>
+<li><b style='color:green;'> href(\"url:title;url:title\"); </b>:-Insert Hyperlinks
+
+</li><hr>
+<li><b style='color:green;'> stdropdown(\"Button name\"); </b>:-Insert a Drop Down Button.
+
+</li><hr>
+<li><b style='color:green;'> edropdown(); </b>:-End dropdown Button
+
+</li><hr>
+<li><b style='color:green;'> etopnav(); </b>:-End Topnav.
+
+</li><hr>
+<li><b style='color:green;'> sum(10,20,30,50); </b>:-Summation or Addition of Numbers.
+
+</li><hr>
+<li><b style='color:green;'> h1(\"Text\"); </b>:-Insert a H1 tag
+
+</li><hr>
+<li><b style='color:green;'> h2(\"Text\"); </b>:-Insert a H2 Tag
+
+</li><hr>
+<li><b style='color:green;'> h3(\"Text\"); </b>:-Insert a H3 tag.
+
+</li><hr>
+<li><b style='color:green;'> h4(\"Text\"); </b>:-Insert a H4 tag.
+
+</li><hr>
+<li><b style='color:green;'> h5(\"Text\"); </b>:-Insert a H5 tag.
+
+</li><hr>
+<li><b style='color:green;'> h6(\"Text\"); </b>:-Insert a H6 tag.
+
+</li><hr>
+<li><b style='color:green;'> add(\"first\",\"second\"); </b>:-Add anything.
+
+</li><hr>
+<li><b style='color:green;'> upper(\"string\"); </b>:-Display uppercase.
+
+</li><hr>
+<li><b style='color:green;'> lower(\"string\"); </b>:-Display Lowercase.
+
+</li><hr>
+<li><b style='color:green;'> capi(\"string\"); </b>:-Display capitalize.
+
+</li><hr>
+<li><b style='color:green;'> sup(\"string\"); </b>:-Display Super script
+
+
+</li><hr>
+<li><b style='color:green;'> sub(\"string\"); </b>:-Display SubScript
+
+
+</li><hr>
+<li><b style='color:green;'> post(\"tagname\"); </b>:-Return a form value of post method
+
+
+</li><hr>
+<li><b style='color:green;'> get(\"tagname\"); </b>:-Return a form value of get method
+
+
+</li><hr>
+<li><b style='color:green;'> mail_api(\"to email address\",\"form\",\"subject\",\"message\",\"return\"); </b>:-Send email.
+
+
+</li><hr>
+<li><b style='color:green;'> block_f5(); </b>:-Block F5 key.
+
+
+</li><hr>
+<li><b style='color:green;'> namta(\"enter the value\"); </b>:-Display the table.
+
+
+</li><hr>
+<li><b style='color:green;'> data(\"connection code\",\"sql code\",\"rows name\"); </b>:-Display data from Mysql.
+
+
+</li><hr>
+<li><b style='color:green;'> seo(\"url\",\"Tag name\"); </b>:-Get the value of any head tag of any url.
+
+
+</li><hr>
+<li><b style='color:green;'> extract_title(\"url\"); </b>:-Extract the title from a website.
+
+
+</li><hr>
+<li><b style='color:green;'> find_all_href(\"URL\"); </b>:-Find all links from a URL.
+
+
+</li><hr>
+<li><b style='color:green;'> fevicon(\"URL\"); </b>:-Get the Fevicon url from a URl.
+
+
+</li><hr>
+<li><b style='color:green;'> html_tag_count(\"URL\",\"tag name\"); </b>:-Count the Tag name from a url.
+
+
+</li><hr>
+<li><b style='color:green;'> count_all_img(\"URL\"); </b>:-Count the All Image from url.
+
+
+</li><hr>
+<li><b style='color:green;'> server(\"all\"); </b>:-Get Server Details.
+
+
+</li><hr>
+<li><b style='color:green;'> jquery(); </b>:-Include jquery.
+
+
+</li><hr>
+<li><b style='color:green;'> createkeyboard(\"ID\"); </b>:-Create a New Keyboard into your website.Note:-Include in sthead() function.
+
+
+</li><hr>
+<li><b style='color:green;'> keyboardstart(\"ID\"); </b>:-Now start to Keyboard options.Include it after ehead() function.
+
+
+</li><hr>
+<li><b style='color:green;'> keyboard(\"ID\",\"value\"); </b>:-Insert keyboard keys.
+
+
+</li><hr>
+<li><b style='color:green;'> backkey(\"ID\"); </b>:-insert a Back key into your keyboard.
+
+
+</li><hr>
+<li><b style='color:green;'> donekey(\"Id\"); </b>:-insert a Done Key into your Keyboard.
+
+
+</li><hr>
+<li><b style='color:green;'> row_count(\"Connection code\",\"mysql code\"); </b>:-Count the Total row from a table.
+
+
+</li><hr>
+<li><b style='color:green;'> title(\"website title\"); </b>:-Website Title.Include after sthead() function.
+
+
+</li><hr>
+<li><b style='color:green;'> keywords(\"webiste keywords\"); </b>:-Insert keywords.Include it after sthead() function.
+
+
+</li><hr>
+<li><b style='color:green;'> mdes(\"Description\"); </b>:-insert meta description.Include it after sthead() function.
+
+
+</li><hr>
+<li><b style='color:green;'> vibrate(\"time\"); </b>:-vibrating.
+
+
+</li><hr>
+<li><b style='color:green;'> font_pack(); </b>:-Include Font awesome.
+
+</li><hr>
+<li><b style='color:green;'> ; </b>:-
+
+
+</li><hr>
+<li><b style='color:green;'> ; </b>:-
+
+
+</li><hr>
+<li><b style='color:green;'> ; </b>:-
+
+
+</li><hr>
+<li><b style='color:green;'> ; </b>:-
+
+
+</li><hr>
+<li><b style='color:green;'> ; </b>:-
+
+
+
+
+
+
+
+
+
+
+        </ol></div>";
+    }
+}
 function redirect($link){
 
     header("Location:".$link);
@@ -29,7 +2175,7 @@ function p($e){
     if($a=="array"){
         print_r($e);
     }else{
-        echo"<p>". $e."</p>";
+        echo $this->realstr($e);
     }
 }
 /////////////////////////////////////////////////////////////////////
@@ -41,11 +2187,13 @@ do{
     $no1++;
 }while($no1<=$no);
 }
-function sthead($description,$keywords,$title){
+
+function sthead(){
+   
+    
+
     echo"<!DOCTYPE html>
-<head><title>".$title."</title><meta name='keywords'content='".$keywords."'>
-<meta name='description'contents='".$description."'>
-           
+<head>
 <style>
 .navbar {
     overflow: hidden;
@@ -112,8 +2260,6 @@ function sthead($description,$keywords,$title){
 
 <meta name='viewport' content='width=device-width, initial-scale=1.0'>
 
-<link rel='stylesheet' href='http://Cdnapicraze.epizy.com/Melt/V2/melt3.min.css' />
-
 <script>
             
             var menuDisplayed = false;
@@ -175,6 +2321,25 @@ function sthead($description,$keywords,$title){
     
     ";
 }
+public function  css($code=""){
+  echo"
+  <style>
+
+".$code."
+  </style>
+  ";
+}
+public function  js($code=""){
+  echo"
+  <script>
+
+".$code."
+  </script>
+  ";
+}
+public function v(){
+  echo"<br><b>Developer Name:</b> Guddu Modok<br><b>Version:</b>0.0.4<br><b>Company Name:</b> Guddu Modok PVT LTD<br>";
+}
 function ehead(){
     echo"</head><body>";
 }
@@ -199,11 +2364,11 @@ function rc_menu($name,$url){
         echo"</div>";
     }
 ////////////////////////////////////////////////////////////////////
-function input($type,$name,$placeholder){
+function input($type="text",$name="Name or Id",$placeholder="Please Enter Here"){
     if($type=="text" OR $type=="TEXT"){
 $a=explode(",",$name);
 foreach($a as $name){
-   echo"<input type='text'name='".$name."'placeholder='".$placeholder."'>"; 
+   echo"<input type='text'name='".$name."'id='".$name."' class='".$name."'placeholder='".$placeholder."'>"; 
 }
 
         
@@ -214,52 +2379,52 @@ foreach($a as $name){
         $a=explode(",",$name);
 foreach($a as $name){
 
-        echo"<input type='button'name='".$name."'value='".$placeholder."'>";
+        echo"<input type='button'name='".$name."'id='".$name."'value='".$placeholder."'class='".$name."'>";
     }
     }else if($type=="submit" OR $type=="SUBMIT"){
         $a=explode(",",$name);
 foreach($a as $name){
 
-        echo"<input type='submit'name='".$name."'value='".$placeholder."'>";
+        echo"<input type='submit'name='".$name."'id='".$name."'value='".$placeholder."'class='".$name."'>";
     }
     }else if($type=="textarea" OR $type=="TEXTAREA"){
         $a=explode(",",$name);
 foreach($a as $name){
 
-        echo"<textarea name='".$name."'placeholder='".$placeholder."'></textarea>";
+        echo"<textarea name='".$name."'placeholder='".$placeholder."'id='".$name."'class='".$name."'></textarea>";
     }
     }else if($type=="password" OR $type=="PASSWORD"){
         $a=explode(",",$name);
 foreach($a as $name){
 
-        echo"<input type='password'name='".$name."'placeholder='".$placeholder."'>";
+        echo"<input type='password'name='".$name."'id='".$name."'placeholder='".$placeholder."'class='".$name."'>";
     }
     }else if($type=="radio" OR $type=="RADIO"){
         $a=explode(",",$name);
 foreach($a as $name){
 
-        echo"<input type='radio'name='".$name."'value='".$placeholder."'>".$placeholder." ";
+        echo"<input type='radio'name='".$name."'value='".$placeholder."'id='".$name."'class='".$name."'>".$placeholder." ";
     }
     }else if($type=="checkbox" OR $type=="CHECKBOX"){
         $a=explode(",",$name);
 foreach($a as $name){
 
-        echo"<input type='checkbox'name='".$name."'value='".$placeholder."'>".$placeholder." ";
+        echo"<input type='checkbox'name='".$name."'value='".$placeholder."'id='".$name."'class='".$name."'>".$placeholder." ";
     }
     }else if($type=="file" OR $type=="FILE"){
         $a=explode(",",$name);
 foreach($a as $name){
 
-        echo"<input type='file'name='".$name."'placeholder='".$placeholder."'> ";
+        echo"<input type='file'name='".$name."'placeholder='".$placeholder."'id='".$name."'class='".$name."'> ";
     }
 }else{
 
-    echo"<input type='".$type."'name='".$name."'placeholder='".$placeholder."'>";
+    echo"<input type='".$type."'name='".$name."'placeholder='".$placeholder."'id='".$name."'class='".$name."'>";
 }
     
 }
 function select($name,$option){
-    echo"<select name='".$name."'>";
+    echo"<select name='".$name."'id='".$name."'>";
     $a=explode(",",$option);
     
     foreach($a as $c){
@@ -270,7 +2435,7 @@ function select($name,$option){
 ////////////////////////////////////////////////////////////////////
 function menu($type,$li){
     ///////////////////////////////////
-if($type=="ol" OR $type=="OL"){
+if($type=="ol" OR $type=="OL" OR $type="order" OR $type="ORDER"){
     //////////////////////////////////____________________//////////////////////////
     echo"<ol>";
     $a=explode(",",$li);
@@ -280,7 +2445,7 @@ if($type=="ol" OR $type=="OL"){
     echo"</ol>";
 }//////////////////////////////////////////////_________________________________//////////
 
-else if($type=="ul" OR $type=="UL"){
+else if($type=="ul" OR $type=="UL" OR $type="unorder" OR $type="UNORDER"){
      echo"<ul>";
     $a=explode(",",$li);
     foreach($a as $li){
@@ -319,7 +2484,13 @@ function alert($alert){
 }
 ////////////////////////////////////////////////////////
 function confirm($confirm){
-    echo"<script>confirm('".$confirm."');</script>";
+    echo "<script>var status=confirm('".$confirm."');
+document.write(status);
+
+    </script>";
+  
+   
+
 }
 
 
@@ -391,7 +2562,7 @@ return $time;
 }
 //<------------------------------------------------------------->
 
-function createfile($filename,$content){
+function createfile($filename="guddu.txt",$content="File Create Using VISTA Framework.Function name createfile(\"filename\",\"content\")"){
     $myfile = fopen($filename, "w") or die("Unable to open file!");
 $txt =$content;
 fwrite($myfile, $txt);
@@ -402,17 +2573,12 @@ function source($url){
     echo file_get_contents($url);
 }
 //<--------------------------------------------------------------------------------->
-function cookie($name,$value,$path,$day,$emz,$smz){
+function cookie($name,$value,$day){
     $set_time=time()+86400*$day;
     $cookie_name1=$name;
     $cookie_value1=$value;
-    $set_cookie_path1=$path;
-    setcookie($cookie_name1, $cookie_value1,$_time,$set_cookie_path1);
-if(!isset($_COOKIE[$cookie_name1])) {
-    echo $smz;
-} else {
-   echo $emz;
-}
+    $set_cookie_path1="/";
+    setcookie($cookie_name1, $cookie_value1,$set_time,$set_cookie_path1,"","","true");
 }
 //<-------------------------------------------------------------------------------------->
 function displaycookie($name){
@@ -420,10 +2586,15 @@ function displaycookie($name){
     echo $_COOKIE[$cookie_name];
 }
 //<------------------------------------------------------------------------------------>
-function deletecookie($name){
-$cookie_name=$name;
+function deletecookie($name=""){
+  $e=$name;
+  $e=explode(",",$e);
+  foreach($e as $n){
+
+$cookie_name=$n;
 // set the expiration date to one hour ago
 setcookie($cookie_name, "", time() - 3600);
+  }
 }
 //<---------------------------------------------------------------------------------------->
 //How to Clear all Cookie and Cache?
@@ -437,7 +2608,7 @@ javascript:(function(){document.cookie.split(';').forEach(function(c) { document
     </script>";
 }
 //<----------------------------------------------------------------------------------->
-function device($mobile,$pc){
+function device($mobile="",$pc=""){
     if(! empty($_SERVER['HTTP_USER_AGENT'])){
     $useragent = $_SERVER['HTTP_USER_AGENT'];
     if( preg_match('@(iPad|iPod|iPhone|Android|BlackBerry|SymbianOS|SCH-M\d+|Opera Mini|Windows CE|Nokia|SonyEricsson|webOS|PalmOS)@', $useragent) ){
@@ -485,9 +2656,17 @@ if(preg_match($reg_exUrl, $text, $url)) {
     }
 }
 }
-function deletefile($filename){
+function deletefile($filename="guddu.txt"){
+  $e=$filename;
+  $e=explode("*",$e);
+  foreach($e as $f){
 
-    unlink($filename);
+if(file_exists($f)){
+    unlink($f);
+}else{
+echo"<br><font color='red'>Sorry! <b>".$f." </b>is Not Found.Please Check the File name and Source</font><br>";
+}
+  }
 }
 /////////////////////////////////////////////////////////////
 
@@ -497,8 +2676,13 @@ echo"
 ";
 
 }
-function href($link,$title){
-    echo"<a href='".$link."'>".$title."</a>";
+function href($link="https://google.com:Google"){
+    $a=explode(";",$link);
+    foreach ($a as $k) {
+        $l=explode(":",$k);
+            echo"<a href='".$l[0]."'> ".$l[1]." </a>";
+      
+    }
 }
 function stdropdown($name){
     echo"<div class='dropdown'>
@@ -534,7 +2718,7 @@ window.onclick = function(e) {
 function etopnav(){
     echo"</div>";
 }
-function sum($no){
+function sum($no=0){
     $a=explode(",",$no);
     $b=count($a);
    foreach($a as $v){
@@ -542,31 +2726,31 @@ function sum($no){
    }
     return $vr;
 }
-function h1($value){
+function h1($value=""){
     echo"<h1>".$value."</h1>";
 }
 
-function h2($value){
+function h2($value=""){
     echo"<h2>".$value."</h2>";
 }
 
-function h3($value){
+function h3($value=""){
     echo"<h3>".$value."</h3>";
 }
 
-function h4($value){
+function h4($value=""){
     echo"<h4>".$value."</h4>";
 }
 
-function h5($value){
+function h5($value=""){
     echo"<h5>".$value."</h5>";
 }
 
-function h6($value){
+function h6($value=""){
     echo"<h6>".$value."</h6>";
 }
 /////////////////////////////////////////////////////////////////
-function add($first,$second){
+function add($first=0,$second=0){
     if(gettype($first)=="string" && gettype($second)=="string"){
         $result=$first.$second;
 
@@ -631,35 +2815,36 @@ $result=$first.$second;
     return $result;
 }
 ////////////////////////////////////////////////////////////////////////
-function upper($string){
-$result="<font style='text-transform:uppercase;'>".$string."</font>";
-return $result;
+function upper($string=""){
+echo "<font style='text-transform:uppercase;'>".$string."</font>";
 }
-function lower($string){
-$result="<font style='text-transform:lowercase;'>".$string."</font>";
-return $result;
+function lower($string=""){
+echo "<font style='text-transform:lowercase;'>".$string."</font>";
 }
-function capi($string){
-$result="<font style='text-transform:capitalize;'>".$string."</font>";
-return $result;
+function capi($string=""){
+echo "<font style='text-transform:capitalize;'>".$string."</font>";
 }
-function sup($string){
-    $result="<sup>".$string."</sup>";
-    return $result;
+function sup($string=""){
+    echo "<sup>".$string."</sup>";
 }
 
-function sub($string){
-    $result="<sub>".$string."</sub>";
-    return $result;
+function sub($string=""){
+    echo "<sub>".$string."</sub>";
 }
 /////////////////////////
-function post($tagname){
+function post($tagname=""){
 $tagname=$_POST[$tagname];
-return $tagname;
+$str=htmlentities($tagname);
+$str=htmlspecialchars($str);
+$str=mysqli_real_escape_string($this->con,$str);
+return $str;
 }
-function get($tagname){
+function get($tagname=""){
 $tagname=$_GET[$tagname];
-return $tagname;
+$str=htmlentities($tagname);
+$str=htmlspecialchars($str);
+$str=mysqli_real_escape_string($this->con,$str);
+return $str;
 }
 function mail_api($to,$form,$subject,$message,$return){
     $to=urlencode($to);
@@ -735,16 +2920,718 @@ echo"</tr><tr>";
     }
     echo"</tr></table>";
 }
-function data($con,$sql,$rows){
-$result=$con->query($sql);
+function data($sql="",$key="",$error=__LINE__){
+  if($sql==""){
+    
+     if($_SERVER["SERVER_NAME"]=="localhost"){
+    echo"<br><font color='red'>Error ID: ".$error."
+    <br>data() function used for 
+    get the value from your query.Please assign the SQL Query
+    <br>
+    </font><br>";
+  }
+  }else if($key==""){
 
-if($result->num_rows>0){
-  
- while($row=$result->fetch_assoc()){
-$rows=$row[$rows];
-
- }
+   if($_SERVER["SERVER_NAME"]=="localhost"){
+    echo"<br><font color='red'>Error ID: ".$error."
+    <br>data() function used for 
+    get the value from your query.Please assign the field name.    <br>
+    </font><br>";
+  }
+  }else{
+$result=mysqli_query($this->con,$sql);
+$val="";
+while($row=mysqli_fetch_array($result,MYSQLI_ASSOC)){
+    $val=$row[$key];
 }
+
+
+return $val;
+  }
+}
+//////////////////////////seo
+function seo($url="https://google.com",$want="keywords"){
+
+$tags = get_meta_tags($url);
+return $tags[$want];
+
+}
+function extract_title($url="https://google.com"){
+$code=file_get_contents($url);
+preg_match("/<title>(.+)<\/title>/siU", $code, $matches);
+$title = $matches[1];
+return $title;
+}
+///////////////////////////////
+function find_all_href($code="https://google.com"){
+    $code=file_get_contents($code);
+    $urlContent = $code;
+
+$dom = new DOMDocument();
+@$dom->loadHTML($urlContent);
+$xpath = new DOMXPath($dom);
+$hrefs = $xpath->evaluate("/html/body//a");
+
+for($i = 0; $i < $hrefs->length; $i++){
+    $href = $hrefs->item($i);
+    $url = $href->getAttribute('href');
+    $url = filter_var($url, FILTER_SANITIZE_URL);
+    // validate url
+    if(!filter_var($url, FILTER_VALIDATE_URL) === false){
+        echo '<a href="'.$url.'"style="color:white;text-decoration:none;">'.substr($url,0,14).'...</a>, ';
+    }
+}
+
+}
+function fevicon($code="https://google.com"){
+$code=file_get_contents($code);
+$doc = new DOMDocument();
+$doc->strictErrorChecking = FALSE;
+$doc->loadHTML($code);
+$xml = simplexml_import_dom($doc);
+$arr = $xml->xpath('//link[@rel="shortcut icon"]');
+return$arr[0]['href'];
+
+}
+function html_tag_count($code="https://www.google.com",$tag="<h1>"){
+$code=file_get_contents($code);
+$p1="/<".$tag.">(.*?)<\/".$tag.">/";
+preg_match_all($p1,$code, $m1);
+$h2=count($m1[0]);
+return $h2;
+}
+function count_all_img($code="https://www.google.com")
+{
+$code=file_get_contents($code);
+preg_match_all("/<img[^>]+>/i",$code,$m);
+$k=count($m[0]);
+return $k;
+}
+
+
+////////////////////////////////////////not define????////////////////
+function enstar($a){
+
+$a=str_replace(" ","#%",$a);
+$a=str_replace("a","'%<br>",$a);
+$a=str_replace("b","''%<br>",$a);
+$a=str_replace("c","'''%<br>",$a);
+$a=str_replace("d","''''%<br>",$a);
+return $a;
+}
+function destar($b){
+
+$b=explode("%",$b);
+print_r($b);
+foreach ($b as $k) {
+    if($k=="'"){
+    $l="a";
+}else if($k=="''"){
+    $l=$l."b";
+}else if($k=="'''"){
+    $l=$l."c";
+}else if($k=="#"){
+    $l=$l." ";
+}else if($k=="''''"){
+    $l=$l."d";
+}else{
+    $l="Undefined !";
+}
+
+}
+return $l;
+}
+//////////////////////////////////////////////////////////////////////
+function server($source="all"){
+    if($source=="all" OR $source=="ALL" OR $source==null){
+
+$a=$_SERVER;
+foreach ($a as $key => $value) {
+    $l=$key.":-".$value;
+    echo $l."<br>";
+}
+}else{
+    $l=$_SERVER[$source];
+}
+return $l;
+}
+function jquery(){
+    echo "<script src='".$_SERVER["REQUEST_SCHEME"]."://".$_SERVER["HTTP_HOST"]."/vista/jquery.js'></script>";
+echo "<script src='".$_SERVER["REQUEST_SCHEME"]."://".$_SERVER["HTTP_HOST"]."/vista/jqueryconfirm.js'></script>";
+
+}
+function font_pack(){
+    echo "<link rel='stylesheet' href='".$_SERVER["REQUEST_SCHEME"]."://".$_SERVER["HTTP_HOST"]."/vista/font.css'>";
+}
+
+
+function createkeyboard($txtid){
+    echo"
+
+<link rel='stylesheet' href='https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css'>
+<style>
+
+.".$txtid."keyarea{
+    position:fixed;
+   width:100%;
+   background-color:#ab9b9b;
+left:0px;
+bottom: 0px;
+height:auto;
+}
+.".$txtid."key{
+    background-color: black;
+    color:white;
+    padding:2.5%;
+    border-radius: 10px;
+    margin:1px;
+    font-family: all;
+    font-weight: bolder;
+    font-size: 100%;
+    cursor: pointer;
+    border:none;
+}
+.".$txtid."key:active{
+    background-color: magenta;
+}
+.".$txtid."key:hover{
+    background-color:white;
+    color:grey;
+}
+</style>  
+
+<script>
+
+     function tunnuSay(text,callback){var u=new SpeechSynthesisUtterance();u.text=text;u.lang='en-US';u.onend=function(){if(callback){callback();}};u.onerror=function(e){if(callback){callback(e);}};speechSynthesis.speak(u);}
+function wlcms(){tunnuSay('Welcome')}
+
+function ".$txtid."openkey(){
+        document.getElementById('".$txtid."keyarea').style='display:block;';
+    }
+
+
+function ".$txtid."keyhide(){
+
+   navigator.vibrate([50]);
+     var audio = new Audio('".$_SERVER["REQUEST_SCHEME"]."://".$_SERVER["HTTP_HOST"]."/vista/x.mp3');
+audio.play();
+    document.getElementById('".$txtid."keyarea').style='display:none;';
+}
+
+function ".$txtid."back(){
+    
+    var value=document.getElementById('".$txtid."').value;
+    if(value.length!=0){
+   navigator.vibrate([50]);
+
+     var audio = new Audio('".$_SERVER["REQUEST_SCHEME"]."://".$_SERVER["HTTP_HOST"]."/vista/y.mp3');
+audio.play();
+    var v=value.split('').pop();
+    v=value.slice(0,-1);
+    document.getElementById('".$txtid."').value=v;
+}
+else{
+
+   tunnuSay('Sorry No Words Found');
+}
+
+}
+function ".$txtid."clearall(){
+    document.getElementById('".$txtid."').value='';
+}
+
+function ".$txtid."val(a){
+   
+   
+   //tunnuSay('');
+   navigator.vibrate([50]);
+   var audio = new Audio('".$_SERVER["REQUEST_SCHEME"]."://".$_SERVER["HTTP_HOST"]."/vista/z.mp3');
+audio.play();
+    var email=document.getElementById('".$txtid."').value;
+
+    var email=email+a;
+    document.getElementById('".$txtid."').value=email;
+}
+
+</script>
+
+";
+
+}
+
+function keyboardstart($txtid){
+    echo"
+
+ <div class='".$txtid."keyarea'id='".$txtid."keyarea'style='display:none;'title='Keyboard developed by VISTA'>
+<center>";
+}
+function keyboard($txtid,$val){
+    $val=explode(",",$val);
+    foreach ($val as $key) {
+        
+    echo" <button onclick='".$txtid."val(\"".$key."\")'class='".$txtid."key'>".$key."</button>";
+    }
+
+}
+function backkey($txtid){
+    echo"
+<button onclick='".$txtid."back()' class='".$txtid."key'>
+<i class='fa fa-close' style='font-size:24px;color:red;'></i></button>
+";
+}
+function donekey($txtid){
+    echo"
+<button onclick='".$txtid."keyhide()'class='".$txtid."key'style=''>
+<i class='fa fa-check' style='font-size:24px;color:green'></i></button>
+ </div> 
+
+
+
+";
+
+}
+function listen($tag,$event){
+echo"
+<".$tag." ".$event."='startButton(event)'id='start_button'>
+<h1 class='center' id='headline'>
+<div id='info'>
+  <p id='info_start'></p>
+  <p id='info_speak_now'></p>
+  <p id='info_no_speech'></p>
+  <p id='info_no_microphone' style='display:none'></p>
+  <p id='info_allow'></p>
+  <p id='info_denied'></p>
+  <p id='info_blocked'></p>
+  <p id='info_upgrade'></p>
+</div>
+<div class='right'>
+  
+</div>
+<div class='center'>
+  <p>
+  <div id='div_language'>
+    <select id='select_language' onchange='updateCountry()'style='position: fixed;left:0px;top:0px;'>
+        
+    </select>
+    &nbsp;&nbsp;
+    <select id='select_dialect'style='position: fixed;right:0px;top:0px;'></select>
+  </div>
+</div>
+
+<div id='results'>
+  <a id='final_span' class='final'style='display:none;'></a>
+  <a id='interim_span' class='interim'style='display:none;'></a>
+  <p>
+</div>
+<script>
+var langs =
+[['Afrikaans',       ['af-ZA']],
+ ['Bahasa Indonesia',['id-ID']],
+ ['Bahasa Melayu',   ['ms-MY']],
+ ['CatalÃ ',          ['ca-ES']],
+ ['ÄŒeÅ¡tina',         ['cs-CZ']],
+ ['Deutsch',         ['de-DE']],
+ ['English',         ['en-AU', 'Australia'],
+                     ['en-CA', 'Canada'],
+                     ['en-IN', 'India'],
+                     ['en-NZ', 'New Zealand'],
+                     ['en-ZA', 'South Africa'],
+                     ['en-GB', 'United Kingdom'],
+                     ['en-US', 'United States']],
+ ['EspaÃ±ol',         ['es-AR', 'Argentina'],
+                     ['es-BO', 'Bolivia'],
+                     ['es-CL', 'Chile'],
+                     ['es-CO', 'Colombia'],
+                     ['es-CR', 'Costa Rica'],
+                     ['es-EC', 'Ecuador'],
+                     ['es-SV', 'El Salvador'],
+                     ['es-ES', 'EspaÃ±a'],
+                     ['es-US', 'Estados Unidos'],
+                     ['es-GT', 'Guatemala'],
+                     ['es-HN', 'Honduras'],
+                     ['es-MX', 'MÃ©xico'],
+                     ['es-NI', 'Nicaragua'],
+                     ['es-PA', 'PanamÃ¡'],
+                     ['es-PY', 'Paraguay'],
+                     ['es-PE', 'PerÃº'],
+                     ['es-PR', 'Puerto Rico'],
+                     ['es-DO', 'RepÃºblica Dominicana'],
+                     ['es-UY', 'Uruguay'],
+                     ['es-VE', 'Venezuela']],
+ ['Euskara',         ['eu-ES']],
+ ['FranÃ§ais',        ['fr-FR']],
+ ['Galego',          ['gl-ES']],
+ ['Hrvatski',        ['hr_HR']],
+ ['IsiZulu',         ['zu-ZA']],
+ ['Ãslenska',        ['is-IS']],
+ ['Italiano',        ['it-IT', 'Italia'],
+                     ['it-CH', 'Svizzera']],
+ ['Magyar',          ['hu-HU']],
+ ['Nederlands',      ['nl-NL']],
+ ['Norsk bokmÃ¥l',    ['nb-NO']],
+ ['Polski',          ['pl-PL']],
+ ['PortuguÃªs',       ['pt-BR', 'Brasil'],
+                     ['pt-PT', 'Portugal']],
+ ['RomÃ¢nÄƒ',          ['ro-RO']],
+ ['SlovenÄina',      ['sk-SK']],
+ ['Suomi',           ['fi-FI']],
+ ['Svenska',         ['sv-SE']],
+ ['TÃ¼rkÃ§e',          ['tr-TR']],
+ ['Ð±ÑŠÐ»Ð³Ð°Ñ€ÑÐºÐ¸',       ['bg-BG']],
+ ['PÑƒÑÑÐºÐ¸Ð¹',         ['ru-RU']],
+ ['Ð¡Ñ€Ð¿ÑÐºÐ¸',          ['sr-RS']],
+ ['í•œêµ­ì–´',            ['ko-KR']],
+ ['ä¸­æ–‡',             ['cmn-Hans-CN', 'æ™®é€šè¯ (ä¸­å›½å¤§é™†)'],
+                     ['cmn-Hans-HK', 'æ™®é€šè¯ (é¦™æ¸¯)'],
+                     ['cmn-Hant-TW', 'ä¸­æ–‡ (å°ç£)'],
+                     ['yue-Hant-HK', 'ç²µèªž (é¦™æ¸¯)']],
+ ['æ—¥æœ¬èªž',           ['ja-JP']],
+ ['Lingua latÄ«na',   ['la']]];
+for (var i = 0; i < langs.length; i++) {
+  select_language.options[i] = new Option(langs[i][0], i);
+}
+select_language.selectedIndex = 6;
+updateCountry();
+select_dialect.selectedIndex = 6;
+showInfo('info_start');
+function updateCountry() {
+  for (var i = select_dialect.options.length - 1; i >= 0; i--) {
+    select_dialect.remove(i);
+  }
+  var list = langs[select_language.selectedIndex];
+  for (var i = 1; i < list.length; i++) {
+    select_dialect.options.add(new Option(list[i][1], list[i][0]));
+  }
+  select_dialect.style.visibility = list[1].length == 1 ? 'hidden' : 'visible';
+}
+var create_email = false;
+var final_transcript = '';
+var recognizing = false;
+var ignore_onend;
+var start_timestamp;
+if (!('webkitSpeechRecognition' in window)) {
+  upgrade();
+} else {
+  start_button.style.display = 'inline-block';
+  var recognition = new webkitSpeechRecognition();
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  recognition.onstart = function() {
+    recognizing = true;
+    showInfo('info_speak_now');
+    start_img.src = 'mic-animate.gif';
+  };
+  recognition.onerror = function(event) {
+    if (event.error == 'no-speech') {
+      start_img.src = 'mic.gif';
+      showInfo('info_no_speech');
+      ignore_onend = true;
+    }
+    if (event.error == 'audio-capture') {
+      start_img.src = 'mic.gif';
+      showInfo('info_no_microphone');
+      ignore_onend = true;
+    }
+    if (event.error == 'not-allowed') {
+      if (event.timeStamp - start_timestamp < 100) {
+        showInfo('info_blocked');
+      } else {
+        showInfo('info_denied');
+      }
+      ignore_onend = true;
+    }
+  };
+  recognition.onend = function() {
+    recognizing = false;
+    if (ignore_onend) {
+      return;
+    }
+    start_img.src = 'mic.gif';
+    if (!final_transcript) {
+      showInfo('info_start');
+      return;
+    }
+    showInfo('');
+    if (window.getSelection) {
+      window.getSelection().removeAllRanges();
+      var range = document.createRange();
+      range.selectNode(document.getElementById('final_span'));
+      window.getSelection().addRange(range);
+    }
+    if (create_email) {
+      create_email = false;
+      createEmail();
+    }
+  };
+  recognition.onresult = function(event) {
+    var interim_transcript = '';
+    for (var i = event.resultIndex; i < event.results.length; ++i) {
+      if (event.results[i].isFinal) {
+        final_transcript += event.results[i][0].transcript;
+      } else {
+        interim_transcript += event.results[i][0].transcript;
+      }
+    }
+    final_transcript =final_transcript.toUpperCase(final_transcript);//here i can change the font
+
+    final_span.innerHTML = final_transcript;
+    interim_span.innerHTML = interim_transcript;
+    document.getElementById('email').value=interim_transcript;
+   
+   return final_transcript;
+  };
+}
+function upgrade() {
+  start_button.style.visibility = 'hidden';
+  showInfo('info_upgrade');
+}
+function linebreak(s) {
+  return s.replace(two_line, '<p></p>').replace(one_line, '<br>');
+}
+var first_char = /\S/;
+function capitalize(s) {
+  return s.replace(first_char, function(m) { return m.toUpperCase(); });
+}
+
+function startButton(event) {
+  if (recognizing) {
+    recognition.stop();
+    return;
+  }
+  final_transcript = '';
+  recognition.lang = select_dialect.value;
+  recognition.start();
+  ignore_onend = false;
+  final_span.innerHTML = '';
+  interim_span.innerHTML = '';
+  start_img.src = 'mic-slash.gif';
+  showInfo('info_allow');
+  showButtons('none');
+  start_timestamp = event.timeStamp;
+}
+function showInfo(s) {
+  if (s) {
+    for (var child = info.firstChild; child; child = child.nextSibling) {
+      if (child.style) {
+        child.style.display = child.id == s ? 'inline' : 'none';
+      }
+    }
+    info.style.visibility = 'visible';
+  } else {
+    info.style.visibility = 'hidden';
+  }
+}
+var current_style;
+function showButtons(style) {
+  if (style == current_style) {
+    return;
+  }
+  current_style = style;
+  copy_button.style.display = style;
+  email_button.style.display = style;
+  copy_info.style.display = 'none';
+  email_info.style.display = 'none';
+}
+</script>
+";
+//include $_SERVER["REQUEST_SCHEME"]."://".$_SERVER["HTTP_HOST"]."/vista/speak.js";
+
+
+
+}
+function row_count($sql="",$error=__LINE__){
+if($sql==""){
+     if($_SERVER["SERVER_NAME"]=="localhost"){
+    echo"<br><font color='red'>Error ID: ".$error."
+    <br>row_count() function used for 
+    count all the Rows from the table with your query.Please Assignment
+    <br>
+    </font><br>";
+  }
+  }else{
+$result = mysqli_query($this->con,$sql);
+$rows = mysqli_num_rows($result);
 return $rows;
 }
+}
+function title($data="This is Website Title"){
+    echo"<title>".$data."</title>";
+}
+function keywords($data="This is Meta Keywords Seperate by Coma"){
+    echo"<meta name='keywords'content='".$data."'>";
+}
+function mdes($data="This is Meta Description"){
+    echo"
+<meta name='Description'content='".$data."'>
+      ";
+}
+function vibrate($t=3){
+    echo"<script>
+    navigator.vibrate(".$t.");
+    </script>";
+}
+
+function realstr($str="",$error=__LINE__){
+  if($str==""){
+    if($_SERVER["SERVER_NAME"]=="localhost"){
+
+    echo"<br><font color='red'>Error ID: ".$error."<br>Sorry ! Realstr() function 
+    is used for an Extra Security Layer of a String.The String is Empty.</font><br>";
+ 
+    }
+  }else{
+$str=htmlentities($str);
+$str=htmlspecialchars($str);
+$str=mysqli_real_escape_string($this->con,$str);
+return $str;
+  }
+}
+
+public function remove_tag_contents($code="",$tag="",$error=__LINE__){
+   if($code=="" OR $tag==""){
+     if($_SERVER["SERVER_NAME"]=="localhost"){
+    echo"<br><font color='red'>Error ID: ".$error."
+    <br>remove_tag_contents() function used for remove contents from a specific tag.Please Assign the Whole Code and Tag name<br>
+    </font><br>";
+  
+  }
+   }else{
+   
+    return preg_replace('#<'.$tag.'(.*?)>(.*?)</'.$tag.'>#is', '', $code);
+   }
+}
+
+public function go($s="",$error=__LINE__){
+  if($s==""){
+    if($_SERVER["SERVER_NAME"]=="localhost"){
+    echo"<br><font color='red'>Error ID: ".$error."<br>Sorry ! go(\"query\"); query is Empty. go() function used for Run a SQl Query.</font><br>";
+  
+  }}else{
+  return mysqli_query($this->con,$s);
+
+}
+}
+
+function check($a="",$b=""){
+  if($a==$b){
+    return true;
+  }else{
+    return false;
+  }
+}
+
+ public function htaccess($f=""){
+   $this->hideerror();
+ $f=explode(":",$f);
+$command=$f[0];
+$o1=$f[1];
+$o2=$f[2];
+  if($command=="error"){
+ $this->htaccess .="ErrorDocument ".$o1." /vista/error_pages/".$o1.".html \n";
+  }else if($command=="redirect"){
+$this->htaccess .="Redirect ".$o1." /".$o2." \n";
+}else if($command=="setname"){
+$this->htaccess .="ReWriteRule ^".$o2."?$ /".$o1." [L] \n";
+}else if($command=="seturl"){
+
+$new=explode("&",$o1);
+for($i=0;$i<count($new);$i++){
+  
+  $t=$new[$i];
+$t=explode("=",$t);
+$title.=$t[1]."([^/\.]+)";
+$query.=$t[0].":";
+
+}
+$q=explode(":",$query);
+for($j=0;$j<count($q)-1;$j++){
+  $n=$j+1;
+  $final.=$q[$j]."=$".$n."&";
+}
+$url=rtrim($final,"&");
+$this->htaccess .="ReWriteRule ^".$title."?$ ".$url." [L] \n";
+}else if($command=="blockip"){
+  $o=explode(",",$o1);
+  foreach($o as $ip){
+    $ips.="deny from ".$ip."\n";
+  }
+$this->htaccess .="order allow,deny\n".$ips."allow from all \n";
+
+}else if($command=="allowip"){
+  $o=explode(",",$o1);
+  foreach($o as $ip){
+    $ips.="allow from ".$ip."\n";
+  }
+$this->htaccess .="order allow,deny\n".$ips."deny from all \n";
+
+}else if($command=="showfiles"){
+  $this->htaccess .="Options +Indexes \n";
+
+}else if($command=="hidefiles"){
+  $this->htaccess .="Options -Indexes \n";
+
+}else if($command=="changeindex"){
+  $this->htaccess .="DirectoryIndex ".$o1." \n";
+
+}else if($command=="hideonly"){
+  $this->htaccess .="IndexIgnore *.".$o1."\n";
+
+}else if($command=="hidefile"){
+  $this->htaccess .="IndexIgnore ".$o1."\n";
+
+}else if($command=="change2php"){
+  $this->htaccess .="AddType application/x-httpd-php .".$o1."\n";
+
+}else if($command=="blockfile"){
+  $this->htaccess .="<files ".$o1.">\n order allow,deny \n deny from all \n </files>";
+
+}
+
+
+
+
+
+ }
+
+
+
+
+function createhtaccess($location="/",$force=FALSE){
+if(file_exists($location.".htaccess")){
+  echo"File  Already Created";
+  if($force==TRUE){
+    //$this->deletefile($location.".htaccess");
+     $c="ReWriteEngine On \n".$this->htaccess;
+$this->createfile($location.".htaccess",$c);
+echo"<br><font color='green'>File Created ByForce</font>";
+  }
+}else{
+   $c="ReWriteEngine On \n".$this->htaccess;
+$this->createfile($location.".htaccess",$c);
+}
+
+}
+
+function printhtaccess(){
+  $c="ReWriteEngine On \n".$this->htaccess;
+ $c= explode("\n",$c);
+  
+  foreach($c as $v){
+    echo $v."<br>";
+  }
+  
+}
+
+
+
+
+
+
+
+
+
+
+
+}
+
 ?>
