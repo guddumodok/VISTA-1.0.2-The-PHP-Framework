@@ -56,3 +56,26 @@
 ##### this function automaticaly Include Structure of HTML file.its start the Head Section. In Argument You can write any HTML/CSS/JS Code.
 ##### example:-
 ##### $vista->sthead("<title>Helllo</title>");
+### ehead():-
+##### This function help to end Head Section
+### css(code):-
+##### this is a Simple Function for write CSS Codes.
+##### Example:-
+##### $vista->css("body{color:red}");
+### js(code):-
+##### this is a Simple Function for write JS Codes.
+##### Example:-
+##### $vista->js("alert('hi')");
+### v():-
+##### this function used for check version.
+### hideerror()::-
+##### This Function help to hide all error message.
+### rightclick():-
+##### this function help to create a right click menu. But if you want to work with this function than you must assign sthead() function.
+### rc_menu(name,url):-
+##### this function help to create right click menu options and by click to go url.
+##### Example:-
+##### rc_menu("Net Salution","https://www.netsalution,com");// Create a Option.
+
+
+
