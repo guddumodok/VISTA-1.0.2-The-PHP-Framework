@@ -45,12 +45,19 @@
 ##### We assign Minute as '-m'.
 ##### We assign Hour as '-h'.
 ##### if You can not set the time than the browser alert some error.
-### en(number):-
+### en(number)/br(number):-
 ##### This Function help to Break line in How Much Value we passed in argument.
 ##### example:-
 ##### $vista->get_connection($connection_object);
 ##### $vista->p("Hello World");
 ##### $vista->en(5);
+##### $vista->p("Hello 2);
+### hr(number):-
+##### This Function help to ccreate Rules in How Much Value we passed in argument.
+##### example:-
+##### $vista->get_connection($connection_object);
+##### $vista->p("Hello World");
+##### $vista->hr(5);
 ##### $vista->p("Hello 2);
 ### sthead(code):-
 ##### this function automaticaly Include Structure of HTML file.its start the Head Section. In Argument You can write any HTML/CSS/JS Code.
@@ -99,5 +106,7 @@
 ##### next we assign 'send:click'-> Look at 'input("button:send:Send");'. Here we create a Button with the ID send. So we define here than send:click .here click is Event Name.
 ##### NExt we assign 'from.php'-> its mean we send the data into from.php files.
 ##### next we assign 'work:getdata'-> its mean in from.php file we used a condition.The from.php file get a variable value getdata. Its a Great filter system.That If getdata is not post than do noting.
-#####
+##### Next we assign 'post'-> its the method which i want to send data. Methods are twwo type 1)post 2)get.
+##### next we enter any javascript code. We return a Data variable in javascript where the Output store.
+
 
