@@ -108,5 +108,6 @@
 ##### next we assign 'work:getdata'-> its mean in from.php file we used a condition.The from.php file get a variable value getdata. Its a Great filter system.That If getdata is not post than do noting.
 ##### Next we assign 'post'-> its the method which i want to send data. Methods are twwo type 1)post 2)get.
 ##### next we enter any javascript code. We return a Data variable in javascript where the Output store.
-
+### getinput(name,section_name):-
+##### this function used for get the values from
 
