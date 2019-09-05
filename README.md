@@ -76,6 +76,28 @@
 ##### this function help to create right click menu options and by click to go url.
 ##### Example:-
 ##### rc_menu("Net Salution","https://www.netsalution,com");// Create a Option.
-
-
+### erightclick():-
+##### This function help to end Right Click section.
+### input("type:name/id/class:placeholder/value;",autocomplete,break_line,section_name):-
+##### this function help us to Create Input Boxes.
+##### Example:-
+##### $vista->input("text:fname:Enter Your First Name;text:lname:Enter Your Last Name;",true,true,"s1");// This code generate me two input box and the boxes are in s1. The Boxes display one by one in lines. Their autocomplete is on.
+#### Why we Used this Function?
+##### => Because we can generate Multiple Input Boxes in a Single Line Codes. We also can send the Input values to my PHP file in a single line. Just Read Below.
+### sendinputvalues(name,section_name,"name:event",location,challenge,method,return):-
+##### this function help to send data to php file in AJAX method. Here First we assign jquery() function.Than Create Input Boxes.
+##### Example:-
+##### $vista->jquery();
+##### $vista->input("text:fname:Enter Your First Name;text:lname:Enter Your Last Name;",true,true,"s1");
+##### input("button:send:Send");
+##### $vista->sendinputvalues("my_first_data","s1","send:click","from.php","work:getdata","post","alert(data)");
+##### Explain:-
+##### First We create Two Input Boxes.and Its will assign in s1.
+##### than sendinputvalues() function create Jquery Code for Send Input values to from.php file and received the output and store in a Javascript values.
+##### here we assign in first argument 'my_first_data'-> its mean we store the input values in COOKIE with the name of my_first_data.
+##### Next we assign 's1'-> its mean we get s1 sections input boxes values. and store in the Cookie.
+##### next we assign 'send:click'-> Look at 'input("button:send:Send");'. Here we create a Button with the ID send. So we define here than send:click .here click is Event Name.
+##### NExt we assign 'from.php'-> its mean we send the data into from.php files.
+##### next we assign 'work:getdata'-> its mean in from.php file we used a condition.The from.php file get a variable value getdata. Its a Great filter system.That If getdata is not post than do noting.
+#####
 
