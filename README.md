@@ -1,11 +1,17 @@
-# vista
-A PHP Framework to  Developed PHP Website or Webapps Easily
-First Download the VISTA file
-Then include it
+# VISTA->
+## Stands for Very Inteligent System for Technical Asignment 
+### What is Vista?
+##### Vista is a PHP Libery Stands for Very Inteligent System for Technical Asignment.
+### Why We Used VISTA?
+##### Small Code = Big solution. We can Solved Big Problems with a Single Line of Code.Also We can Secure String, Create File Folders, Cookies,Sessions,Htaccess etc.
+### How to Use VISTA?
+##### Download The Vista ZIP and Unzip it in Root Folder .Than Create a Index File in Root Folder and Paste the Codes.
 <?php
-include(".vista");
+define("vista","Developer Name");
+include("vista/.vista");
 p("Hello World");
 
+
+
 ?>
-All The Functions Definations are on a Blog.
-I will gave the Link just whatsapp me +919547551208
+
