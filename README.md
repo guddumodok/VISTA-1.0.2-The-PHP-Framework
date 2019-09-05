@@ -52,3 +52,7 @@
 ##### $vista->p("Hello World");
 ##### $vista->en(5);
 ##### $vista->p("Hello 2);
+### sthead(code):-
+##### this function automaticaly Include Structure of HTML file.its start the Head Section. In Argument You can write any HTML/CSS/JS Code.
+##### example:-
+##### $vista->sthead("<title>Helllo</title>");
