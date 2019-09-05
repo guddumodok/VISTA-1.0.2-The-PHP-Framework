@@ -36,5 +36,19 @@
 ### redirect(url)::-
 ##### this Function help to redirct to the URL.
 ##### Example::-
-##### $vista->redirect("https://www.google.com"); when someone access this page they redirect into google
-
+##### $vista->redirect("https://www.netsalution.com"); //when someone access this page they redirect into Net Salution Website
+### timeredirect(time,url):-
+##### this function help to redirect when the time end.
+##### example:-
+##### $vista->timeredirect("5-s","https://www.netsalution.com");// When 5 second End than The Page Redirect into Net Salution Website.
+##### We assign Second as '-s'.
+##### We assign Minute as '-m'.
+##### We assign Hour as '-h'.
+##### if You can not set the time than the browser alert some error.
+### en(number):-
+##### This Function help to Break line in How Much Value we passed in argument.
+##### example:-
+##### $vista->get_connection($connection_object);
+##### $vista->p("Hello World");
+##### $vista->en(5);
+##### $vista->p("Hello 2);
